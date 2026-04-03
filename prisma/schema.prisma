@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String   @id @default(uuid())
+  email               String   @unique
+  name                String
+  role                String   // "admin" | "user" | "readonly"
+  allowedResourceKeys String[] // ["*"] means all
+  passwordHash        String?  // nullable for mock login/SSO
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  auditLogs           AuditLog[]
+  sessions            BrokerSession[]
+}
+
+model Resource {
+  id             String   @id @default(uuid())
+  resourceKey    String   @unique
+  name           String
+  appHost        String
+  apiHost        String
+  loginUrl       String
+  loginMethod    String   @default("POST")
+  loginAdapter   String   // "form_login_basic" | "form_login_csrf" | "json_login"
+  tokenExtractionPath  String? // JSON path to the one-time token in the login response, e.g. "info.token"
+  tokenValidationPath  String? // client app path that validates the one-time token, e.g. "/auth/validate"
+  usernameField  String?  // e.g. "email" or "user_id"
+  passwordField  String?  // e.g. "password" or "passAuth"
+  environment    String   @default("production")
+  isActive       Boolean  @default(true)
+  description    String?
+  iconUrl        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  accounts       ManagedAccount[]
+  sessions       BrokerSession[]
+  auditLogs      AuditLog[]
+}
+
+model ManagedAccount {
+  id          String   @id @default(uuid())
+  resource    Resource @relation(fields: [resourceId], references: [id])
+  resourceId  String
+  accountKey  String
+  vaultPath   String
+  label       String
+  role        String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sessions    BrokerSession[]
+}
+
+model BrokerSession {
+  brokerSessionId  String   @id @default(uuid())
+  user             User     @relation(fields: [userId], references: [id])
+  userId           String
+  resource         Resource @relation(fields: [resourceId], references: [id])
+  resourceId       String
+  managedAccount   ManagedAccount @relation(fields: [managedAccountId], references: [id])
+  managedAccountId String
+  upstreamCookies  Json     // Map<string, string>
+  status           String   @default("active")
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+
+  auditLogs        AuditLog[]
+}
+
+model AuditLog {
+  id               String   @id @default(uuid())
+  action           String
+  user             User?    @relation(fields: [userId], references: [id])
+  userId           String?
+  resource         Resource? @relation(fields: [resourceId], references: [id])
+  resourceId       String?
+  brokerSession    BrokerSession? @relation(fields: [brokerSessionId], references: [brokerSessionId])
+  brokerSessionId String?
+  timestamp        DateTime @default(now())
+  details          Json?
+  ipAddress        String?
+  outcome          String   // "success" | "failure" | "info"
+}
