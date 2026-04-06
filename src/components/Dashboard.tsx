@@ -5,18 +5,49 @@ import { useApp } from "@/lib/app-context";
 import type { OpenAppResponse } from "@/types";
 import TopBar from "@/components/layout/TopBar";
 import AppCard from "@/components/AppCard";
+import AwsAppCard from "@/components/AwsAppCard";
 import {
   SessionSuccessModal,
   SessionPanel,
   DebugPanel,
 } from "@/components/SessionPanel";
-import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
-
 import AdminPanel from "@/components/AdminPanel";
+import { 
+  Box, 
+  Container, 
+  Typography, 
+  Grid, 
+  Paper, 
+  Button, 
+  Stack, 
+  Avatar, 
+  Chip, 
+  Skeleton,
+  alpha,
+  useTheme,
+  IconButton,
+  ToggleButtonGroup,
+  ToggleButton,
+  Divider,
+  Fade,
+  Alert
+} from "@mui/material";
+import { 
+  RefreshCw, 
+  LayoutDashboard, 
+  Settings2, 
+  Activity, 
+  Zap, 
+  Info, 
+  ShieldAlert,
+  ChevronRight,
+  Database
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function Dashboard() {
   const { user, resources, fetchResources, lastOpenResult, sessions } = useApp();
+  const theme = useTheme();
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [resourceError, setResourceError] = useState<string | null>(null);
   const [modal, setModal] = useState<OpenAppResponse | null>(null);
@@ -35,244 +66,265 @@ export default function Dashboard() {
       }
     };
     load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const activeSessions = sessions.filter((s) => s.status === "active").length;
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--color-bg)" }}>
+    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
       <TopBar />
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Page header */}
-        <div className="mb-8 animate-fade-in">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1
-                className="text-2xl font-bold tracking-tight"
-                style={{ color: "var(--color-text-primary)" }}
-              >
-                Welcome back, {user?.name?.split(" ")[0]}
-              </h1>
-              <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                {view === "apps" ? "Select an application to broker access" : "System administration and provisioning"}
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              {user?.role === "admin" && (
-                <div className="flex bg-slate-900/50 p-1 rounded-xl border border-slate-800">
-                  <button
-                    onClick={() => setView("apps")}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      view === "apps"
-                        ? "bg-indigo-600 text-white shadow-lg"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                  >
-                    User Dashboard
-                  </button>
-                  <button
-                    onClick={() => setView("admin")}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      view === "admin"
-                        ? "bg-indigo-600 text-white shadow-lg"
-                        : "text-slate-400 hover:text-slate-200"
-                    }`}
-                  >
-                    Admin Panel
-                  </button>
-                </div>
-              )}
-              {activeSessions > 0 && (
-              <div
-                className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm animate-pulse-ring"
-                style={{
-                  background: "var(--color-success-dim)",
-                  border: "1px solid rgba(16,185,129,0.2)",
-                  color: "var(--color-success)",
-                }}
-              >
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: "var(--color-success)" }}
-                />
-                {activeSessions} active {activeSessions === 1 ? "session" : "sessions"}
-              </div>
+      <Container maxWidth="xl" sx={{ py: 6, flex: 1, position: 'relative' }}>
+        {/* Glow effect */}
+        <Box sx={{ 
+          position: 'absolute', 
+          top: 0, 
+          left: '50%', 
+          transform: 'translateX(-50%)', 
+          width: '60%', 
+          height: 400, 
+          background: `radial-gradient(circle, ${alpha(theme.palette.primary.main, 0.05)} 0%, transparent 70%)`,
+          filter: 'blur(100px)',
+          pointerEvents: 'none',
+          zIndex: 0
+        }} />
+
+        {/* Header */}
+        <Box sx={{ mb: 6, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'flex-start', md: 'center' }, justifyContent: 'space-between', gap: 3, position: 'relative', zIndex: 1 }}>
+          <Box>
+            <Typography variant="h2" sx={{ fontWeight: 800 }}>
+              Hello, {user?.name?.split(" ")[0]}
+            </Typography>
+            <Typography variant="subtitle1">
+              {view === "apps" ? "Securely broker access to internal applications." : "Manage applications and system settings."}
+            </Typography>
+          </Box>
+
+          <Stack direction="row" spacing={2} alignItems="center">
+            {user?.role === "admin" && (
+              <Paper elevation={0} sx={{ p: 0.5, borderRadius: 3, display: 'flex', bgcolor: alpha(theme.palette.background.paper, 0.5), border: `1px solid ${theme.palette.divider}` }}>
+                <Button 
+                  variant={view === 'apps' ? 'contained' : 'text'}
+                  onClick={() => setView('apps')}
+                  startIcon={<LayoutDashboard size={16} />}
+                  sx={{ borderRadius: 2.5, px: 2, py: 0.8, color: view === 'apps' ? 'white' : 'text.secondary' }}
+                >
+                  Dashboard
+                </Button>
+                <Button 
+                  variant={view === 'admin' ? 'contained' : 'text'}
+                  onClick={() => setView('admin')}
+                  startIcon={<Settings2 size={16} />}
+                  sx={{ borderRadius: 2.5, px: 2, py: 0.8, color: view === 'admin' ? 'white' : 'text.secondary' }}
+                >
+                  Admin
+                </Button>
+              </Paper>
             )}
-          </div>
-          </div>
-        </div>
+
+            <AnimatePresence>
+              {activeSessions > 0 && (
+                <Fade in={true}>
+                  <Chip
+                    label={`${activeSessions} Active ${activeSessions === 1 ? "Session" : "Sessions"}`}
+                    color="success"
+                    variant="outlined"
+                    sx={{ 
+                      borderRadius: 2, 
+                      fontWeight: 700, 
+                      bgcolor: alpha(theme.palette.success.main, 0.1),
+                      borderColor: alpha(theme.palette.success.main, 0.2),
+                      '& .MuiChip-label': { px: 2 }
+                    }}
+                    icon={<Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main', ml: 1, animation: 'pulse 2s infinite' }} />}
+                  />
+                </Fade>
+              )}
+            </AnimatePresence>
+          </Stack>
+        </Box>
 
         {view === "apps" ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-            {/* Apps grid */}
-            <div className="lg:col-span-2 space-y-6">
-              <div
-                className="rounded-2xl p-5"
-                style={{
-                  background: "var(--color-surface-1)",
-                  border: "1px solid var(--color-border)",
+          <Grid container spacing={4} sx={{ position: 'relative', zIndex: 1 }}>
+            {/* Main Area */}
+            <Grid size={{ xs: 12, xl: 9 }}>
+              <Paper 
+                elevation={1} 
+                sx={{ 
+                  p: { xs: 3, md: 5 }, 
+                  borderRadius: 6,
+                  backgroundColor: alpha(theme.palette.background.paper, 0.4),
+                  backdropFilter: 'blur(20px)',
                 }}
               >
-                <div className="flex items-center justify-between mb-5">
-                  <h2
-                    className="text-sm font-semibold flex items-center gap-2"
-                    style={{ color: "var(--color-text-primary)" }}
-                  >
-                    Available Applications
-                    <Badge variant="info">{resources.length}</Badge>
-                  </h2>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setIsLoadingResources(true);
-                      fetchResources().finally(() => setIsLoadingResources(false));
-                    }}
-                    isLoading={isLoadingResources}
-                  >
-                    Refresh
-                  </Button>
-                </div>
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', gap: 2, mb: 6 }}>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <Box sx={{ width: 48, height: 48, borderRadius: 3, bgcolor: '#18181b', display: 'flex', alignItems: 'center', justifyCenter: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
+                      <Zap size={24} color={theme.palette.primary.main} style={{ margin: 'auto' }} />
+                    </Box>
+                    <Box>
+                      <Typography variant="h3" sx={{ fontSize: '1.25rem' }}>Applications Directory</Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500 }}>Select an app to establish a zero-trust session.</Typography>
+                    </Box>
+                  </Stack>
+
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <Typography variant="caption" sx={{ color: 'primary.light', fontWeight: 800, px: 2, py: 0.8, bgcolor: alpha(theme.palette.primary.main, 0.1), borderRadius: 2, border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}` }}>
+                      {resources.length} AVAILABLE
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={() => {
+                        setIsLoadingResources(true);
+                        fetchResources().finally(() => setIsLoadingResources(false));
+                      }}
+                      sx={{ borderRadius: 2.5, borderColor: 'rgba(255,255,255,0.1)', color: 'text.secondary' }}
+                      startIcon={<RefreshCw size={14} className={isLoadingResources ? 'animate-spin' : ''} />}
+                    >
+                      Sync
+                    </Button>
+                  </Stack>
+                </Box>
 
                 {resourceError && (
-                  <div
-                    className="text-sm px-4 py-3 rounded-xl mb-4"
-                    style={{
-                      background: "var(--color-error-dim)",
-                      color: "var(--color-error)",
-                    }}
-                  >
-                    {resourceError}
-                  </div>
+                  <Alert severity="error" sx={{ mb: 4, borderRadius: 3 }}>{resourceError}</Alert>
                 )}
 
                 {isLoadingResources ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {[1, 2, 3].map((i) => (
-                      <div
-                        key={i}
-                        className="h-48 rounded-xl animate-pulse"
-                        style={{ background: "var(--color-surface-3)" }}
-                      />
+                  <Grid container spacing={3}>
+                    {[1, 2, 3, 4].map((i) => (
+                      <Grid size={{ xs: 12, md: 6 }} key={i}>
+                        <Skeleton variant="rectangular" height={210} sx={{ borderRadius: 4, bgcolor: alpha(theme.palette.background.paper, 0.5) }} />
+                      </Grid>
                     ))}
-                  </div>
+                  </Grid>
                 ) : resources.length === 0 ? (
-                  <div
-                    className="text-center py-12 text-sm"
-                    style={{ color: "var(--color-text-muted)" }}
-                  >
-                    No applications available
-                  </div>
+                  <Box sx={{ py: 10, textAlign: 'center', border: '2px dashed rgba(255,255,255,0.05)', borderRadius: 4, bgcolor: alpha(theme.palette.background.paper, 0.2) }}>
+                    <Info size={40} color={theme.palette.text.secondary} style={{ opacity: 0.3, marginBottom: 16 }} />
+                    <Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600 }}>No applications provisioned for your identity.</Typography>
+                  </Box>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Grid container spacing={3}>
                     {resources.map((r) => (
-                      <AppCard
-                        key={r.id}
-                        resource={r}
-                        onOpen={(result) => setModal(result)}
-                      />
+                      <Grid size={{ xs: 12, md: 6 }} key={r.id}>
+                        {"awsAccountId" in r ? (
+                          <AwsAppCard resource={r} />
+                        ) : (
+                          <AppCard
+                            resource={r}
+                            onOpen={(result) => setModal(result)}
+                          />
+                        )}
+                      </Grid>
                     ))}
-                  </div>
+                  </Grid>
                 )}
-              </div>
+              </Paper>
 
-              {/* Sessions panel */}
-              <SessionPanel />
-            </div>
+              <Box sx={{ mt: 4 }}>
+                <SessionPanel />
+              </Box>
+            </Grid>
 
             {/* Sidebar */}
-            <div className="space-y-5">
-              {/* User card */}
-              <div
-                className="rounded-2xl p-5 animate-fade-in"
-                style={{
-                  background: "var(--color-surface-2)",
-                  border: "1px solid var(--color-border)",
-                }}
-              >
-                <h3
-                  className="text-xs font-semibold uppercase tracking-wider mb-4"
-                  style={{ color: "var(--color-text-muted)" }}
-                >
-                  Current User
-                </h3>
-                <div className="flex items-center gap-3 mb-4">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm"
-                    style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}
-                  >
-                    {user?.name?.charAt(0)}
-                  </div>
-                  <div>
-                    <p
-                      className="text-sm font-medium"
-                      style={{ color: "var(--color-text-primary)" }}
+            <Grid size={{ xs: 12, xl: 3 }}>
+              <Stack spacing={3}>
+                {/* Persona Card */}
+                <Paper sx={{ p: 4, borderRadius: 5, position: 'relative', overflow: 'hidden' }}>
+                  <Box sx={{ position: 'absolute', top: 0, right: 0, width: 120, height: 120, background: `radial-gradient(circle, ${alpha(theme.palette.primary.main, 0.1)} 0%, transparent 70%)`, pointerEvents: 'none' }} />
+                  
+                  <Typography variant="caption" sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1, fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>
+                    <Activity size={14} /> CURRENT PERSONA
+                  </Typography>
+
+                  <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 4 }}>
+                    <Avatar 
+                      sx={{ 
+                        width: 56, 
+                        height: 56, 
+                        bgcolor: 'primary.main',
+                        fontSize: '1.5rem',
+                        fontWeight: 800,
+                        background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+                        boxShadow: `0 8px 16px ${alpha(theme.palette.primary.main, 0.25)}`,
+                        border: '2px solid rgba(255,255,255,0.1)'
+                      }}
                     >
-                      {user?.name}
-                    </p>
-                    <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-                      {user?.email}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span style={{ color: "var(--color-text-muted)" }}>Role</span>
-                  <Badge variant={user?.role ?? "user"}>{user?.role}</Badge>
-                </div>
-                <div className="flex items-center justify-between text-xs mt-2">
-                  <span style={{ color: "var(--color-text-muted)" }}>Access</span>
-                  <span style={{ color: "var(--color-text-secondary)" }}>
-                    {user?.allowedResourceKeys.includes("*")
-                      ? "All apps"
-                      : `${user?.allowedResourceKeys.length} app(s)`}
-                  </span>
-                </div>
-              </div>
+                      {user?.name?.charAt(0)}
+                    </Avatar>
+                    <Box>
+                      <Typography variant="body1" sx={{ fontWeight: 800 }}>{user?.name}</Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500 }}>{user?.email}</Typography>
+                    </Box>
+                  </Stack>
 
-              {/* Debug panel */}
-              <DebugPanel result={lastOpenResult} />
+                  <Divider sx={{ mb: 3 }} />
 
-              {/* Architecture callout */}
-              <div
-                className="rounded-2xl p-5 text-xs space-y-2"
-                style={{
-                  background: "rgba(99,102,241,0.05)",
-                  border: "1px solid rgba(99,102,241,0.15)",
-                }}
-              >
-                <p className="font-semibold" style={{ color: "var(--color-brand-400)" }}>
-                  Broker Flow
-                </p>
-                {[
-                  "1. Validate user ACL",
-                  "2. Select managed account",
-                  "3. Fetch creds from Vault",
-                  "4. POST creds → client backend",
-                  "5. Client issues one-time token",
-                  "6. Build redirect URL with token",
-                  "7. Browser lands on client app",
-                  "8. Client validates token → login",
-                ].map((step) => (
-                  <p key={step} style={{ color: "var(--color-text-secondary)" }}>
-                    {step}
-                  </p>
-                ))}
-              </div>
-            </div>
-          </div>
+                  <Stack spacing={2}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>ACCESS LEVEL</Typography>
+                      <Chip label={user?.role} size="small" variant="outlined" sx={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '0.65rem' }} />
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>RESOURCE SCOPE</Typography>
+                      <Typography variant="caption" sx={{ fontWeight: 800, fontFamily: 'monospace', color: 'primary.light' }}>
+                        {user?.allowedResourceKeys.includes("*") ? "ALL_RESOURCES" : `${user?.allowedResourceKeys.length} ENTRIES`}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                </Paper>
+
+                {/* Debug Tools */}
+                <DebugPanel result={lastOpenResult} />
+
+                {/* Network Graph Info */}
+                <Paper 
+                  sx={{ 
+                    p: 4, 
+                    borderRadius: 5, 
+                    background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.05)}, transparent)`,
+                    border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                    '&:hover': { borderColor: alpha(theme.palette.primary.main, 0.3) },
+                    transition: 'border-color 0.3s'
+                  }}
+                >
+                  <Typography variant="caption" sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1, fontWeight: 800, color: 'primary.main', letterSpacing: '0.1em' }}>
+                    <ShieldAlert size={14} /> BROKER TOPOLOGY
+                  </Typography>
+
+                  <Stack spacing={1.5}>
+                    {[
+                      "Evaluate user ACL constraints",
+                      "Select managed profile",
+                      "Fetch Keys from Vault",
+                      "POST to Upstream Engine",
+                      "Retrieve handoff OTP",
+                      "Execute secure redirect",
+                    ].map((step, idx) => (
+                      <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', width: 14 }}>{idx + 1}</Typography>
+                        <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>{step}</Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                </Paper>
+              </Stack>
+            </Grid>
+          </Grid>
         ) : (
-          <div className="animate-fade-in">
-            <AdminPanel />
-          </div>
+          <Fade in={true}>
+            <Box>
+              <AdminPanel />
+            </Box>
+          </Fade>
         )}
-      </main>
+      </Container>
 
       {/* Modal */}
       {modal && (
         <SessionSuccessModal result={modal} onClose={() => setModal(null)} />
       )}
-    </div>
+    </Box>
   );
 }

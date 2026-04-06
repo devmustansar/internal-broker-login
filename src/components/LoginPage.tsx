@@ -2,10 +2,27 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
-import Button from "@/components/ui/Button";
+import { 
+  Box, 
+  Container, 
+  Typography, 
+  TextField, 
+  Button, 
+  Paper, 
+  IconButton, 
+  InputAdornment, 
+  Alert,
+  Fade,
+  Stack,
+  alpha,
+  useTheme
+} from "@mui/material";
+import { Shield, Mail, Key, Sparkles, ChevronRight } from "lucide-react";
+import { motion } from "framer-motion";
 
 export default function LoginPage() {
   const { login, isLoading } = useApp();
+  const theme = useTheme();
   const [email, setEmail] = useState("alice@company.com");
   const [password, setPassword] = useState("password");
   const [error, setError] = useState("");
@@ -20,185 +37,218 @@ export default function LoginPage() {
     }
   };
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "10px 14px",
-    borderRadius: "10px",
-    border: "1px solid var(--color-border)",
-    background: "var(--color-surface-3)",
-    color: "var(--color-text-primary)",
-    fontSize: "14px",
-    outline: "none",
-    transition: "border-color 0.2s",
-  };
-
   const DEMO_USERS = [
     { email: "alice@company.com", name: "Alice (Admin — all apps)" },
     { email: "bob@company.com", name: "Bob (User — staging + dashboard)" },
-    { email: "carol@company.com", name: "Carol (Readonly — dashboard only)" },
+    { email: "carol@company.com", name: "Carol (Readonly)" },
   ];
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: "var(--color-bg)" }}
+    <Box
+      sx={{
+        position: 'relative',
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        p: 2,
+        backgroundColor: 'background.default',
+        overflow: 'hidden',
+      }}
     >
-      {/* Background grid */}
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 50% 0%, rgba(99,102,241,0.08) 0%, transparent 60%)",
+      {/* Background Effects */}
+      <Box
+        sx={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 0,
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            inset: 0,
+            background: `radial-gradient(ellipse at top, ${alpha(theme.palette.primary.main, 0.1)} 0%, transparent 70%)`,
+          },
         }}
       />
 
-      <div className="w-full max-w-md animate-fade-in">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div
-            className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center text-white font-bold text-lg"
-            style={{
-              background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
-              boxShadow: "0 0 40px rgba(99,102,241,0.3)",
-            }}
-          >
-            ICB
-          </div>
-          <h1
-            className="text-2xl font-bold tracking-tight"
-            style={{ color: "var(--color-text-primary)" }}
-          >
-            Internal Credentials Broker
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-            Sign in to access brokered applications
-          </p>
-        </div>
-
-        {/* Card */}
-        <div
-          className="rounded-2xl p-6"
-          style={{
-            background: "var(--color-surface-1)",
-            border: "1px solid var(--color-border)",
-          }}
+      <Container maxWidth="xs" sx={{ position: 'relative', zIndex: 1 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
         >
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-xs font-medium mb-1.5"
-                style={{ color: "var(--color-text-secondary)" }}
-              >
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-                style={inputStyle}
-                onFocus={(e) =>
-                  (e.target.style.borderColor = "var(--color-brand-500)")
-                }
-                onBlur={(e) =>
-                  (e.target.style.borderColor = "var(--color-border)")
-                }
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-xs font-medium mb-1.5"
-                style={{ color: "var(--color-text-secondary)" }}
-              >
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-                style={inputStyle}
-                onFocus={(e) =>
-                  (e.target.style.borderColor = "var(--color-brand-500)")
-                }
-                onBlur={(e) =>
-                  (e.target.style.borderColor = "var(--color-border)")
-                }
-              />
-            </div>
-
-            {error && (
-              <div
-                className="text-sm px-3 py-2 rounded-lg"
-                style={{
-                  background: "var(--color-error-dim)",
-                  color: "var(--color-error)",
-                  border: "1px solid rgba(239,68,68,0.2)",
+          {/* Header */}
+          <Box sx={{ textAlign: 'center', mb: 6 }}>
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.1, type: 'spring' }}
+            >
+              <Box
+                sx={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: 4,
+                  mx: 'auto',
+                  mb: 3,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+                  boxShadow: `0 0 40px ${alpha(theme.palette.primary.main, 0.4)}`,
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
                 }}
               >
-                {error}
-              </div>
-            )}
-
-            <Button
-              type="submit"
-              size="lg"
-              isLoading={isLoading}
-              className="w-full justify-center mt-2"
-              id="login-submit"
+                <Shield size={32} color="white" />
+              </Box>
+            </motion.div>
+            
+            <Typography variant="h1" sx={{ mb: 1 }}>
+              CredBroker
+            </Typography>
+            <Typography 
+              variant="subtitle1" 
+              sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}
             >
-              Sign in
-            </Button>
-          </form>
+              Zero-Trust Access Gateway <Sparkles size={16} color={theme.palette.primary.main} />
+            </Typography>
+          </Box>
 
-          {/* Demo credentials */}
-          <div className="mt-6">
-            <p
-              className="text-xs mb-3"
-              style={{ color: "var(--color-text-muted)" }}
-            >
-              Demo accounts (password: <span className="font-mono">password</span>)
-            </p>
-            <div className="space-y-2">
-              {DEMO_USERS.map((u) => (
-                <button
-                  key={u.email}
-                  type="button"
-                  onClick={() => {
-                    setEmail(u.email);
-                    setPassword("password");
-                  }}
-                  className="w-full text-left px-3 py-2 rounded-lg text-xs transition-colors cursor-pointer"
-                  style={{
-                    background: "var(--color-surface-2)",
-                    color: "var(--color-text-secondary)",
-                    border: "1px solid var(--color-border)",
-                  }}
+          {/* Login Card */}
+          <Paper
+            elevation={1}
+            sx={{
+              p: 4,
+              mb: 4,
+              borderRadius: 4,
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              backgroundColor: alpha(theme.palette.background.paper, 0.4),
+              backdropFilter: 'blur(20px)',
+            }}
+          >
+            <form onSubmit={handleSubmit}>
+              <Stack spacing={3}>
+                <Box>
+                  <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                    Identity
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    variant="outlined"
+                    placeholder="name@company.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Mail size={18} color={theme.palette.text.secondary} />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Box>
+
+                <Box>
+                  <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                    Passkey
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    type="password"
+                    variant="outlined"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Key size={18} color={theme.palette.text.secondary} />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Box>
+
+                {error && (
+                  <Fade in={!!error}>
+                    <Alert severity="error" variant="outlined" sx={{ borderRadius: 2, backgroundColor: alpha(theme.palette.error.main, 0.05) }}>
+                      {error}
+                    </Alert>
+                  </Fade>
+                )}
+
+                <Button
+                  fullWidth
+                  type="submit"
+                  variant="contained"
+                  size="large"
+                  disabled={isLoading}
+                  sx={{ py: 1.5, mt: 2 }}
                 >
-                  <span
-                    className="font-mono block"
-                    style={{ color: "var(--color-brand-400)" }}
-                  >
-                    {u.email}
-                  </span>
-                  <span>{u.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+                  {isLoading ? 'Authenticating...' : 'Authenticate Securely'}
+                </Button>
+              </Stack>
+            </form>
 
-        <p className="text-center mt-4 text-xs" style={{ color: "var(--color-text-muted)" }}>
-          Internal use only · POC environment
-        </p>
-      </div>
-    </div>
+            {/* Quick Connect */}
+            <Box sx={{ mt: 5, pt: 4, borderTop: `1px solid ${theme.palette.divider}` }}>
+              <Typography variant="caption" sx={{ mb: 2, display: 'block', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                Relayer Handshake
+              </Typography>
+              <Stack spacing={1.5}>
+                {DEMO_USERS.map((user) => (
+                  <Button
+                    key={user.email}
+                    variant="text"
+                    onClick={() => {
+                      setEmail(user.email);
+                      setPassword("password");
+                    }}
+                    sx={{
+                      justifyContent: 'space-between',
+                      px: 2,
+                      py: 1.5,
+                      borderRadius: 3,
+                      backgroundColor: alpha(theme.palette.background.paper, 0.3),
+                      border: '1px solid transparent',
+                      '&:hover': {
+                        backgroundColor: alpha(theme.palette.background.paper, 0.6),
+                        borderColor: alpha(theme.palette.primary.main, 0.2),
+                        '& .chevron': { transform: 'translateX(4px)' }
+                      },
+                      color: 'text.primary',
+                    }}
+                    endIcon={<ChevronRight className="chevron" size={16} style={{ transition: 'transform 0.2s' }} />}
+                  >
+                    <Box sx={{ textAlign: 'left', flex: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.light', display: 'block' }}>
+                        {user.email}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        {user.name}
+                      </Typography>
+                    </Box>
+                  </Button>
+                ))}
+              </Stack>
+            </Box>
+          </Paper>
+
+          <Typography
+            variant="caption"
+            sx={{
+              display: 'block',
+              textAlign: 'center',
+              color: 'text.secondary',
+              fontWeight: 700,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+            }}
+          >
+            Internal Network • Relayer v3.4
+          </Typography>
+        </motion.div>
+      </Container>
+    </Box>
   );
 }

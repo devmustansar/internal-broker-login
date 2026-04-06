@@ -91,3 +91,38 @@ model AuditLog {
   ipAddress        String?
   outcome          String   // "success" | "failure" | "info"
 }
+
+// ─── AWS Federation ───────────────────────────────────────────────────────────
+
+model AwsResource {
+  id                   String   @id @default(uuid())
+  /// Unique key used in portal ACL checks, e.g. "aws-prod-readonly"
+  resourceKey          String   @unique
+  name                 String
+  description          String?
+  /// AWS account ID for display purposes, e.g. "123456789012"
+  awsAccountId         String
+  /// IAM Role ARN the broker will assume, e.g. "arn:aws:iam::123456789012:role/BrokerConsoleRole"
+  roleArn              String
+  /// AWS region, e.g. "us-east-1"
+  region               String   @default("us-east-1")
+  /// AWS Console destination URL after sign-in, e.g. "https://console.aws.amazon.com/"
+  destination          String   @default("https://console.aws.amazon.com/")
+  /// Issuer label in CloudTrail, e.g. "internal-broker"
+  issuer               String   @default("internal-broker")
+  /// STS session duration in seconds. Min 900, max 43200.
+  sessionDurationSeconds Int    @default(3600)
+  /// Optional external ID for cross-account trust policy
+  externalId           String?
+  /// Key used to look up broker IAM credentials from SecretsProvider, e.g. "aws/broker/default"
+  brokerCredentialRef  String
+  /// "assume_role" (preferred) or "federation_token" (fallback)
+  stsStrategy          String   @default("assume_role")
+  /// Whether this resource appears in the portal
+  isActive             Boolean  @default(true)
+  /// Environment tag for display
+  environment          String   @default("production")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+

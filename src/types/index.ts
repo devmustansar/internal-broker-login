@@ -59,21 +59,6 @@ export interface BrokerSession {
   metadata?: Record<string, unknown>;
 }
 
-export type AuditAction =
-  | "user_login"
-  | "user_logout"
-  | "app_open_attempt"
-  | "access_granted"
-  | "access_denied"
-  | "broker_session_created"
-  | "broker_session_ended"
-  | "vault_credential_fetched"
-  | "upstream_login_success"
-  | "upstream_login_failed"
-  | "one_time_token_issued"
-  | "one_time_token_failed"
-  | "redirect_url_issued";
-
 export interface AuditLog {
   id: string;
   action: AuditAction;
@@ -145,3 +130,124 @@ export interface AuthContext {
   iat?: number;
   exp?: number;
 }
+
+// ─── AWS Federation ───────────────────────────────────────────────────────────
+
+/**
+ * Stored in the DB AwsResource.config JSON column.
+ * All durations are in seconds unless noted.
+ */
+export interface AwsResourceConfig {
+  /** AWS account ID, e.g. "123456789012" */
+  awsAccountId: string;
+  /** IAM Role ARN to assume, e.g. "arn:aws:iam::123456789012:role/BrokerConsoleRole" */
+  roleArn: string;
+  /** AWS region for the console destination, e.g. "us-east-1" */
+  region: string;
+  /**
+   * Console destination URL after login.
+   * Must be an allowed AWS console URL (allowlisted in aws-federation.service.ts).
+   * e.g. "https://console.aws.amazon.com/ec2/v2/home"
+   */
+  destination: string;
+  /** Issuer label shown in CloudTrail, e.g. "internal-broker" */
+  issuer: string;
+  /** STS session duration in seconds. Min 900, max 43200. Default 3600. */
+  sessionDurationSeconds: number;
+  /** External ID for cross-account role trust policy (optional) */
+  externalId?: string;
+  /**
+   * Reference key to look up broker credentials in the SecretsProvider.
+   * e.g. "aws/broker/default" or "aws/accounts/123456789012/readonly"
+   */
+  brokerCredentialRef: string;
+  /**
+   * Which STS strategy to use.
+   * "assume_role" — preferred; broker IAM user assumes target IAM role.
+   * "federation_token" — fallback; uses broker credentials directly (less secure).
+   */
+  stsStrategy: "assume_role" | "federation_token";
+}
+
+/**
+ * Broker's own AWS credentials, loaded from SecretsProvider.
+ * These are the long-lived IAM credentials that the broker uses to call STS.
+ * In production, these come from HashiCorp Vault.
+ * In dev/POC, they come from DummyVaultSecretsProvider.
+ */
+export interface AwsBrokerCredentials {
+  accessKeyId: string;
+  secretAccessKey: string;
+  /** Optional — only needed if broker itself uses a temporary credential (e.g. broker-on-EC2 w/ assumed role) */
+  sessionToken?: string;
+}
+
+/**
+ * Temporary AWS credentials obtained from STS (AssumeRole or GetFederationToken).
+ * These are passed to the AWS federation endpoint.
+ */
+export interface AwsTemporaryCredentials {
+  sessionId: string;    // maps to Credentials.AccessKeyId
+  sessionKey: string;   // maps to Credentials.SecretAccessKey
+  sessionToken: string; // maps to Credentials.SessionToken
+  expiration: Date;
+}
+
+/**
+ * Final result of the AWS federation flow.
+ */
+export interface AwsFederationResult {
+  /** The full AWS console sign-in URL with the SigninToken embedded */
+  loginUrl: string;
+  /** ISO timestamp when the temporary credentials expire */
+  expiresAt: string;
+  /** The AWS account ID for audit logging */
+  awsAccountId: string;
+  /** The role ARN that was assumed */
+  roleArn: string;
+}
+
+/**
+ * Audit event payload for AWS federation launches.
+ * Extends base audit log with AWS-specific fields.
+ */
+export interface AwsAuditDetails {
+  awsAccountId: string;
+  roleArn: string;
+  region: string;
+  stsStrategy: string;
+  sessionDuration: number;
+  destination: string;
+  ipAddress?: string;
+  userAgent?: string;
+  brokerCredentialRef: string;
+  expiresAt?: string;
+  error?: string;
+}
+
+// Extend AuditAction with AWS-specific entries
+export type AuditAction =
+  | "user_login"
+  | "user_logout"
+  | "app_open_attempt"
+  | "access_granted"
+  | "access_denied"
+  | "broker_session_created"
+  | "broker_session_ended"
+  | "vault_credential_fetched"
+  | "upstream_login_success"
+  | "upstream_login_failed"
+  | "one_time_token_issued"
+  | "one_time_token_failed"
+  | "redirect_url_issued"
+  // ─── AWS Federation ─────────────────────────────────────────────────────────
+  | "aws_launch_attempt"
+  | "aws_secrets_loaded"
+  | "aws_secrets_failed"
+  | "aws_sts_success"
+  | "aws_sts_failed"
+  | "aws_signin_token_obtained"
+  | "aws_signin_token_failed"
+  | "aws_console_redirect_issued"
+  | "aws_entitlement_denied";
+

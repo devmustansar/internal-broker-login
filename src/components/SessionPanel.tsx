@@ -1,10 +1,41 @@
 "use client";
 
-import type { OpenAppResponse, BrokerSession } from "@/types";
-import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
-import { useApp } from "@/lib/app-context";
 import { useState } from "react";
+import type { OpenAppResponse, BrokerSession } from "@/types";
+import { useApp } from "@/lib/app-context";
+import { 
+  Box, 
+  Typography, 
+  Button, 
+  Chip, 
+  Paper, 
+  Modal, 
+  Stack, 
+  Divider, 
+  IconButton, 
+  Tooltip,
+  alpha,
+  useTheme,
+  Fade,
+  Backdrop,
+  Skeleton
+} from "@mui/material";
+import { 
+  CheckCircle2, 
+  Clock, 
+  Check, 
+  TerminalSquare, 
+  Activity, 
+  ExternalLink, 
+  XCircle,
+  Copy,
+  Hash,
+  Globe,
+  Zap,
+  MoreVertical,
+  ChevronRight
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface SessionSuccessModalProps {
   result: OpenAppResponse;
@@ -12,103 +43,134 @@ interface SessionSuccessModalProps {
 }
 
 export function SessionSuccessModal({ result, onClose }: SessionSuccessModalProps) {
+  const theme = useTheme();
   const timeLeft = Math.max(
     0,
     Math.floor((new Date(result.expiresAt).getTime() - Date.now()) / 1000 / 60)
   );
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)" }}
-      onClick={onClose}
+    <Modal
+      open={true}
+      onClose={onClose}
+      closeAfterTransition
+      BackdropComponent={Backdrop}
+      BackdropProps={{
+        timeout: 500,
+        sx: { backgroundColor: 'rgba(0, 0, 0, 0.8)', backdropFilter: 'blur(10px)' }
+      }}
     >
-      <div
-        className="w-full max-w-md rounded-2xl p-6 animate-fade-in"
-        style={{
-          background: "var(--color-surface-2)",
-          border: "1px solid var(--color-border)",
-          boxShadow: "0 0 60px rgba(99,102,241,0.15)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Success icon */}
-        <div className="flex items-center gap-3 mb-5">
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center text-lg"
-            style={{ background: "var(--color-success-dim)", color: "var(--color-success)" }}
+      <Fade in={true}>
+        <Box sx={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '100%',
+          maxWidth: 480,
+          outline: 'none',
+          p: 1
+        }}>
+          <Paper
+            elevation={24}
+            sx={{
+              p: 5,
+              borderRadius: 8,
+              position: 'relative',
+              overflow: 'hidden',
+              backgroundColor: alpha(theme.palette.background.paper, 0.6),
+              backdropFilter: 'blur(20px)',
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+              boxShadow: `0 0 80px ${alpha(theme.palette.primary.main, 0.15)}`,
+            }}
           >
-            ✓
-          </div>
-          <div>
-            <h2
-              className="text-base font-semibold"
-              style={{ color: "var(--color-text-primary)" }}
-            >
-              Broker Session Created
-            </h2>
-            <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-              Access has been brokered successfully
-            </p>
-          </div>
-          <Badge variant="active" className="ml-auto">
-            {result.status}
-          </Badge>
-        </div>
+            {/* Success Header */}
+            <Stack direction="row" spacing={3} alignItems="center" sx={{ mb: 6 }}>
+              <Box sx={{ 
+                width: 56, 
+                height: 56, 
+                borderRadius: 4, 
+                bgcolor: alpha(theme.palette.success.main, 0.1),
+                border: `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: `0 0 20px ${alpha(theme.palette.success.main, 0.1)}`
+              }}>
+                <CheckCircle2 color={theme.palette.success.main} size={28} />
+              </Box>
+              <Box flexGrow={1}>
+                <Typography variant="h3" sx={{ fontSize: '1.25rem', fontWeight: 800 }}>Access Handshake</Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>Zero-trust cluster session established.</Typography>
+              </Box>
+              <Chip 
+                label={result.status} 
+                color="primary" 
+                size="small" 
+                sx={{ borderRadius: 2, fontWeight: 900, fontSize: '0.65rem' }} 
+              />
+            </Stack>
 
-        <div
-          className="rounded-xl p-4 space-y-3 mb-5"
-          style={{ background: "var(--color-surface-3)" }}
-        >
-          <DataRow label="Session ID" value={result.brokerSessionId} mono copy />
-          <DataRow label="Resource" value={result.resourceKey} />
-          <DataRow label="App Host" value={result.appHost} mono />
-          <DataRow label="API Host" value={result.apiHost} mono />
-          <DataRow
-            label="Expires"
-            value={`${new Date(result.expiresAt).toLocaleTimeString()} (~${timeLeft}m)`}
-          />
-        </div>
+            {/* Session Details */}
+            <Stack spacing={2} sx={{ mt: 4, mb: 6, p: 3, borderRadius: 4, bgcolor: alpha(theme.palette.background.paper, 0.4), border: `1px solid ${theme.palette.divider}` }}>
+              <DataRow label="Topology ID" value={result.brokerSessionId} mono copy />
+              <DataRow label="Target" value={result.resourceKey} />
+              <DataRow label="App Gateway" value={result.appHost} mono />
+              <DataRow label="Lease TTL" value={`${new Date(result.expiresAt).toLocaleTimeString()} (~${timeLeft}m)`} />
+            </Stack>
 
-        <div className="flex gap-3">
-          {result.redirectUrl ? (
-            <Button
-              onClick={() => {
-                window.open(result.redirectUrl, "_blank");
-                onClose();
-              }}
-              className="w-full justify-center"
-            >
-              🚀 Launch App
-            </Button>
-          ) : result.handoffToken ? (
-            // legacy proxy fallback
-            <Button
-              onClick={() => {
-                const host = result.appHost.replace(/^https?:\/\//, "");
-                window.open(`https://${host}/_proxy/bootstrap?token=${result.handoffToken}`, "_blank");
-                onClose();
-              }}
-              className="w-full justify-center"
-            >
-              Open App in New Tab
-            </Button>
-          ) : null}
-          <Button onClick={onClose} variant="ghost" className="w-full justify-center">
-            Close
-          </Button>
-        </div>
-
-      </div>
-    </div>
+            {/* Actions */}
+            <Stack direction="row" spacing={2}>
+              {result.redirectUrl ? (
+                <Button
+                  fullWidth
+                  variant="contained"
+                  size="large"
+                  onClick={() => {
+                    window.open(result.redirectUrl, "_blank");
+                    onClose();
+                  }}
+                  sx={{ py: 1.5, fontWeight: 800 }}
+                  endIcon={<ExternalLink size={18} />}
+                >
+                  Enter Platform
+                </Button>
+              ) : result.handoffToken ? (
+                <Button
+                  fullWidth
+                  variant="contained"
+                  size="large"
+                  onClick={() => {
+                    const host = result.appHost.replace(/^https?:\/\//, "");
+                    window.open(`https://${host}/_proxy/bootstrap?token=${result.handoffToken}`, "_blank");
+                    onClose();
+                  }}
+                  sx={{ py: 1.5, fontWeight: 800 }}
+                  endIcon={<ExternalLink size={18} />}
+                >
+                  Enter Platform
+                </Button>
+              ) : null}
+              <Button
+                variant="outlined"
+                size="large"
+                onClick={onClose}
+                sx={{ px: 4, borderRadius: 3, fontWeight: 700 }}
+              >
+                Dismiss
+              </Button>
+            </Stack>
+          </Paper>
+        </Box>
+      </Fade>
+    </Modal>
   );
 }
-
-// ─── Session List Panel ───────────────────────────────────────────────────────
 
 export function SessionPanel() {
   const { sessions, endSession } = useApp();
   const [ending, setEnding] = useState<string | null>(null);
+  const theme = useTheme();
 
   if (sessions.length === 0) return null;
 
@@ -122,148 +184,134 @@ export function SessionPanel() {
   };
 
   return (
-    <div
-      className="rounded-2xl p-5"
-      style={{
-        background: "var(--color-surface-1)",
-        border: "1px solid var(--color-border)",
+    <Paper 
+      elevation={1} 
+      sx={{ 
+        p: 4, 
+        borderRadius: 5, 
+        bgcolor: alpha(theme.palette.background.paper, 0.4),
+        backdropFilter: 'blur(20px)',
+        border: `1px solid ${theme.palette.divider}`
       }}
     >
-      <h2
-        className="text-sm font-semibold mb-4 flex items-center gap-2"
-        style={{ color: "var(--color-text-primary)" }}
-      >
-        <span
-          className="w-1.5 h-1.5 rounded-full"
-          style={{ background: "var(--color-success)" }}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 4 }}>
+        <Typography variant="caption" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+          <Activity size={16} color={theme.palette.success.main} /> Active Cluster Sessions
+        </Typography>
+        <Chip 
+          label={sessions.length.toString()} 
+          size="small" 
+          sx={{ borderRadius: 2, fontWeight: 900, bgcolor: alpha(theme.palette.success.main, 0.1), color: 'success.light', border: `1px solid ${alpha(theme.palette.success.main, 0.2)}` }} 
         />
-        Active Sessions
-        <span
-          className="ml-auto text-xs font-normal px-2 py-0.5 rounded-full"
-          style={{
-            background: "var(--color-surface-3)",
-            color: "var(--color-text-secondary)",
-          }}
-        >
-          {sessions.length}
-        </span>
-      </h2>
+      </Box>
 
-      <div className="space-y-3">
-        {sessions.map((session) => (
-          <SessionRow
-            key={session.brokerSessionId}
-            session={session}
-            isEnding={ending === session.brokerSessionId}
-            onEnd={() => handleEnd(session.brokerSessionId)}
-          />
-        ))}
-      </div>
-    </div>
+      <Stack spacing={2}>
+        <AnimatePresence>
+          {sessions.map((session) => (
+            <motion.div
+              key={session.brokerSessionId}
+              layout
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98, height: 0, margin: 0, overflow: 'hidden' }}
+            >
+              <Paper 
+                variant="outlined" 
+                sx={{ 
+                  p: 2.5, 
+                  borderRadius: 4, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 3, 
+                  transition: 'all 0.2s',
+                  '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.02), borderColor: alpha(theme.palette.primary.main, 0.2) }
+                }}
+              >
+                <Box sx={{ 
+                  width: 8, 
+                  height: 8, 
+                  borderRadius: '50%', 
+                  bgcolor: session.status === 'active' ? 'success.main' : 'text.disabled',
+                  boxShadow: session.status === 'active' ? `0 0 12px ${theme.palette.success.main}` : 'none',
+                  animation: session.status === 'active' ? 'pulse 2s infinite' : 'none'
+                }} />
+
+                <Box sx={{ flexGrow: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 800, mb: 0.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    {session.resourceKey}
+                    <Chip label={session.status} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 900, textTransform: 'uppercase' }} />
+                  </Typography>
+                  <Stack direction="row" spacing={3}>
+                    <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', fontWeight: 400 }}>
+                      {session.brokerSessionId.slice(0, 16)}…
+                    </Typography>
+                    {session.status === 'active' && (
+                      <Typography variant="caption" sx={{ color: 'success.light', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Clock size={10} /> {Math.max(0, Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000 / 60))}m
+                      </Typography>
+                    )}
+                  </Stack>
+                </Box>
+
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="error"
+                  onClick={() => handleEnd(session.brokerSessionId)}
+                  disabled={ending === session.brokerSessionId}
+                  sx={{ borderRadius: 2, border: 'none', bgcolor: alpha(theme.palette.error.main, 0.05), '&:hover': { border: 'none', bgcolor: alpha(theme.palette.error.main, 0.1) } }}
+                >
+                  Terminate
+                </Button>
+              </Paper>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </Stack>
+    </Paper>
   );
 }
-
-function SessionRow({
-  session,
-  isEnding,
-  onEnd,
-}: {
-  session: BrokerSession;
-  isEnding: boolean;
-  onEnd: () => void;
-}) {
-  const isActive = session.status === "active";
-  const expiresAt = new Date(session.expiresAt);
-  const timeLeft = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000 / 60));
-
-  return (
-    <div
-      className="rounded-xl p-3 flex items-center gap-3"
-      style={{
-        background: "var(--color-surface-2)",
-        border: "1px solid var(--color-border)",
-      }}
-    >
-      <div
-        className="w-2 h-2 rounded-full flex-shrink-0"
-        style={{
-          background: isActive
-            ? "var(--color-success)"
-            : "var(--color-text-muted)",
-          boxShadow: isActive ? "0 0 6px var(--color-success)" : "none",
-        }}
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span
-            className="text-xs font-medium"
-            style={{ color: "var(--color-text-primary)" }}
-          >
-            {session.resourceKey}
-          </span>
-          <Badge variant={session.status as "active" | "ended" | "expired" | "failed" | "pending"}>
-            {session.status}
-          </Badge>
-        </div>
-        <p className="text-xs mt-0.5 font-mono truncate" style={{ color: "var(--color-text-muted)" }}>
-          {session.brokerSessionId.slice(0, 16)}…
-        </p>
-        {isActive && (
-          <p className="text-xs mt-0.5" style={{ color: "var(--color-text-muted)" }}>
-            Expires in {timeLeft}m
-          </p>
-        )}
-      </div>
-      {isActive && (
-        <Button
-          variant="danger"
-          size="sm"
-          isLoading={isEnding}
-          onClick={onEnd}
-          className="flex-shrink-0"
-        >
-          End
-        </Button>
-      )}
-    </div>
-  );
-}
-
-// ─── Debug Panel ──────────────────────────────────────────────────────────────
 
 export function DebugPanel({ result }: { result: OpenAppResponse | null }) {
+  const theme = useTheme();
   if (!result) return null;
 
   return (
-    <div
-      className="rounded-2xl p-5"
-      style={{
-        background: "var(--color-surface-1)",
-        border: "1px solid var(--color-border)",
+    <Paper 
+      elevation={1} 
+      sx={{ 
+        p: 4, 
+        borderRadius: 5, 
+        bgcolor: alpha(theme.palette.background.paper, 0.4),
+        border: `1px solid ${theme.palette.divider}` 
       }}
     >
-      <h2
-        className="text-sm font-semibold mb-4 flex items-center gap-2"
-        style={{ color: "var(--color-text-primary)" }}
-      >
-        <span style={{ color: "var(--color-brand-400)" }}>⌥</span> Debug Panel
-      </h2>
+      <Typography variant="caption" sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1.5, fontWeight: 800, color: 'primary.main', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+        <TerminalSquare size={16} /> Topology Telemetry
+      </Typography>
 
-      <pre
-        className="text-xs overflow-auto rounded-xl p-4 font-mono leading-relaxed"
-        style={{
-          background: "var(--color-surface-3)",
-          color: "#a5b4fc",
-          maxHeight: "240px",
-        }}
-      >
-        {JSON.stringify(result, null, 2)}
-      </pre>
-    </div>
+      <Box sx={{ 
+        p: 3, 
+        borderRadius: 4, 
+        bgcolor: '#0d0d0d', 
+        border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+        position: 'relative'
+      }}>
+        <pre style={{ 
+          margin: 0, 
+          fontSize: '0.7rem', 
+          fontFamily: 'monospace', 
+          color: theme.palette.primary.light, 
+          opacity: 0.8,
+          overflow: 'auto',
+          maxHeight: 300
+        }}>
+          {JSON.stringify(result, null, 2)}
+        </pre>
+      </Box>
+    </Paper>
   );
 }
-
-// ─── Shared DataRow ───────────────────────────────────────────────────────────
 
 function DataRow({
   label,
@@ -277,6 +325,7 @@ function DataRow({
   copy?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  const theme = useTheme();
 
   const handleCopy = () => {
     navigator.clipboard.writeText(value);
@@ -285,30 +334,14 @@ function DataRow({
   };
 
   return (
-    <div className="flex items-center gap-3 text-xs">
-      <span
-        className="w-20 flex-shrink-0"
-        style={{ color: "var(--color-text-muted)" }}
-      >
-        {label}
-      </span>
-      <span
-        className={`flex-1 truncate ${mono ? "font-mono" : ""}`}
-        style={{ color: "var(--color-text-secondary)" }}
-        title={value}
-      >
-        {value}
-      </span>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, pb: 1.5, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}`, '&:last-child': { border: 0, pb: 0 } }}>
+      <Typography variant="caption" sx={{ width: 100, flexShrink: 0, fontWeight: 800, color: 'text.secondary', fontSize: '0.65rem' }}>{label.toUpperCase()}</Typography>
+      <Typography variant="caption" sx={{ flexGrow: 1, fontWeight: 600, color: mono ? 'primary.light' : 'text.primary', fontFamily: mono ? 'monospace' : 'inherit', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</Typography>
       {copy && (
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="text-xs flex-shrink-0 transition-colors cursor-pointer"
-          style={{ color: copied ? "var(--color-success)" : "var(--color-text-muted)" }}
-        >
-          {copied ? "✓" : "copy"}
-        </button>
+        <IconButton size="small" onClick={handleCopy} sx={{ borderRadius: 2, bgcolor: copied ? 'success.main' : alpha(theme.palette.divider, 0.5), color: copied ? 'white' : 'text.secondary', '&:hover': { bgcolor: copied ? 'success.dark' : alpha(theme.palette.divider, 1) } }}>
+          {copied ? <Check size={14} /> : <Copy size={12} />}
+        </IconButton>
       )}
-    </div>
+    </Box>
   );
 }

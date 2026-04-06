@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import type { Resource, OpenAppResponse } from "@/types";
 import { useApp } from "@/lib/app-context";
 import { 
   Box, 
@@ -13,18 +12,27 @@ import {
   Chip, 
   Button, 
   Stack, 
-  IconButton, 
-  Tooltip,
-  alpha,
+  alpha, 
   useTheme,
   Alert,
-  Fade
+  Fade,
+  LinearProgress
 } from "@mui/material";
-import { Server, ExternalLink, ShieldAlert, Globe, Activity } from "lucide-react";
+import { Cloud, ExternalLink, ShieldCheck, Cpu, KeyRound } from "lucide-react";
 
-interface AppCardProps {
-  resource: Resource;
-  onOpen: (result: OpenAppResponse) => void;
+interface AwsCardProps {
+  resource: {
+    id: string;
+    resourceKey: string;
+    name: string;
+    description?: string | null;
+    awsAccountId: string;
+    roleArn: string;
+    region: string;
+    destination: string;
+    environment: string;
+    stsStrategy: string;
+  };
 }
 
 const ENV_COLORS: Record<string, "success" | "info" | "warning"> = {
@@ -33,49 +41,36 @@ const ENV_COLORS: Record<string, "success" | "info" | "warning"> = {
   development: "warning",
 };
 
-const ADAPTER_LABELS: Record<string, string> = {
-  form_login_basic: "Form Login",
-  form_login_csrf: "Form + CSRF",
-  json_login: "JSON API",
-};
-
-export default function AppCard({ resource, onOpen }: AppCardProps) {
-  const { openApp } = useApp();
+export default function AwsAppCard({ resource }: AwsCardProps) {
+  const { launchAwsConsole } = useApp();
   const theme = useTheme();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [launched, setLaunched] = useState(false);
 
-  const handleOpen = async () => {
+  const handleLaunch = async () => {
     setIsLoading(true);
     setError(null);
+    setLaunched(false);
     try {
-      const result = await openApp(resource.resourceKey);
-      if (result.redirectUrl) {
-        window.open(result.redirectUrl, "_blank");
-      }
-      onOpen(result);
+      const result = await launchAwsConsole(resource.resourceKey);
+      window.open(result.loginUrl, "_blank");
+      setLaunched(true);
+      setTimeout(() => setLaunched(false), 4000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to open app");
+      setError(err instanceof Error ? err.message : "Failed to launch AWS Console");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const initials = resource.name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
+  const accountDisplay =
+    resource.awsAccountId.length === 12
+      ? `${resource.awsAccountId.slice(0, 4)}…${resource.awsAccountId.slice(-4)}`
+      : resource.awsAccountId;
 
-  const colorPalettes = [
-    theme.palette.primary.main,
-    theme.palette.info.main,
-    theme.palette.secondary.main,
-    theme.palette.warning.main,
-  ];
-  const colorIdx = resource.id.charCodeAt(resource.id.length - 1) % colorPalettes.length;
-  const cardColor = colorPalettes[colorIdx];
+  const roleName = resource.roleArn.split("/").pop() ?? resource.roleArn;
+  const awsColor = "#ff9900"; // AWS Orange
 
   return (
     <Card 
@@ -92,10 +87,9 @@ export default function AppCard({ resource, onOpen }: AppCardProps) {
         border: `1px solid ${theme.palette.divider}`,
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         '&:hover': {
-          borderColor: alpha(cardColor, 0.4),
+          borderColor: alpha(awsColor, 0.5),
           transform: 'translateY(-4px)',
-          boxShadow: `0 12px 24px ${alpha(cardColor, 0.1)}`,
-          '& .chevron': { transform: 'translateX(4px)' }
+          boxShadow: `0 12px 24px ${alpha(awsColor, 0.15)}`,
         }
       }}
     >
@@ -105,7 +99,7 @@ export default function AppCard({ resource, onOpen }: AppCardProps) {
         right: -40, 
         width: 120, 
         height: 120, 
-        background: `radial-gradient(circle, ${alpha(cardColor, 0.1)} 0%, transparent 70%)`,
+        background: `radial-gradient(circle, ${alpha(awsColor, 0.15)} 0%, transparent 70%)`,
         pointerEvents: 'none'
       }} />
 
@@ -116,15 +110,13 @@ export default function AppCard({ resource, onOpen }: AppCardProps) {
               width: 52, 
               height: 52, 
               borderRadius: 3.5,
-              fontWeight: 800,
-              fontSize: '1.2rem',
-              bgcolor: alpha(cardColor, 0.1),
-              color: cardColor,
-              border: `1px solid ${alpha(cardColor, 0.2)}`,
-              boxShadow: `0 8px 16px ${alpha(cardColor, 0.15)}`
+              bgcolor: alpha(awsColor, 0.1),
+              color: awsColor,
+              border: `1px solid ${alpha(awsColor, 0.3)}`,
+              boxShadow: `0 8px 20px ${alpha(awsColor, 0.2)}`
             }}
           >
-            {initials}
+            <Cloud size={24} fill="currentColor" />
           </Avatar>
           <Box sx={{ minWidth: 0, flexGrow: 1 }}>
             <Typography variant="h3" sx={{ fontSize: '1.1rem', fontWeight: 800, color: 'text.primary', mb: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -137,24 +129,31 @@ export default function AppCard({ resource, onOpen }: AppCardProps) {
                 color={ENV_COLORS[resource.environment] || "info"} 
                 sx={{ height: 18, fontSize: '0.6rem', fontWeight: 900, borderRadius: 1.5 }} 
               />
-              {resource.description && (
-                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  • {resource.description}
-                </Typography>
-              )}
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                • AWS TENANT
+              </Typography>
             </Stack>
           </Box>
         </Stack>
 
         <Stack spacing={2} sx={{ mt: 1 }}>
-          <MetaDataRow label="Gateway" value={resource.appHost} icon={<Globe size={14} />} mono />
-          <MetaDataRow label="Auth Engine" value={ADAPTER_LABELS[resource.loginAdapter]} icon={<ShieldAlert size={14} />} />
+          <MetaDataRow label="Account" value={accountDisplay} icon={<KeyRound size={14} />} mono />
+          <MetaDataRow label="IAM Role" value={roleName} icon={<ShieldCheck size={14} />} mono />
+          <MetaDataRow label="Zone" value={resource.region} icon={<Cpu size={14} />} />
         </Stack>
 
         {error && (
           <Fade in={true}>
             <Alert severity="error" variant="outlined" sx={{ mt: 3, borderRadius: 2, fontSize: '0.75rem', py: 0 }}>
               {error}
+            </Alert>
+          </Fade>
+        )}
+
+        {launched && !error && (
+          <Fade in={true}>
+            <Alert severity="success" variant="outlined" icon={<ShieldCheck size={18} />} sx={{ mt: 3, borderRadius: 2, fontSize: '0.75rem', py: 0, bgcolor: alpha(theme.palette.success.main, 0.05) }}>
+              Federation established.
             </Alert>
           </Fade>
         )}
@@ -165,27 +164,38 @@ export default function AppCard({ resource, onOpen }: AppCardProps) {
           fullWidth
           variant="contained"
           size="large"
-          color="inherit"
           disabled={isLoading}
-          onClick={handleOpen}
+          onClick={handleLaunch}
           sx={{ 
             borderRadius: 3,
             py: 1.5,
             fontWeight: 800,
-            bgcolor: alpha(theme.palette.background.paper, 0.8),
-            color: 'text.primary',
-            border: `1px solid ${theme.palette.divider}`,
+            bgcolor: alpha(awsColor, 0.9),
+            color: 'black',
             '&:hover': {
-              bgcolor: alpha(cardColor, 0.1),
-              color: cardColor,
-              borderColor: alpha(cardColor, 0.3)
+              bgcolor: awsColor,
+              boxShadow: `0 0 20px ${alpha(awsColor, 0.4)}`
             }
           }}
           startIcon={<ExternalLink size={18} />}
         >
-          {isLoading ? "Provisioning..." : "Launch Handshake"}
+          {isLoading ? "Generating STS..." : "Federate Service Console"}
         </Button>
       </CardActions>
+      
+      {isLoading && (
+        <LinearProgress 
+          sx={{ 
+            position: 'absolute', 
+            bottom: 0, 
+            left: 0, 
+            right: 0, 
+            height: 4,
+            bgcolor: 'transparent',
+            '& .MuiLinearProgress-bar': { bgcolor: awsColor }
+          }} 
+        />
+      )}
     </Card>
   );
 }

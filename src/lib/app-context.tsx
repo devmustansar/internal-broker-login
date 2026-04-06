@@ -18,7 +18,7 @@ interface AuthState {
 }
 
 interface BrokerState {
-  resources: Resource[];
+  resources: any[];
   sessions: BrokerSession[];
   lastOpenResult: OpenAppResponse | null;
 }
@@ -30,6 +30,8 @@ interface AppContextValue extends AuthState, BrokerState {
   openApp: (resourceKey: string) => Promise<OpenAppResponse>;
   endSession: (sessionId: string) => Promise<void>;
   refreshSession: (sessionId: string) => Promise<BrokerSession | null>;
+  /** AWS Console federation launch — returns the full console login URL */
+  launchAwsConsole: (resourceKey: string) => Promise<{ loginUrl: string; expiresAt: string; awsAccountId: string; roleArn: string }>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -38,7 +40,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<InternalUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [resources, setResources] = useState<Resource[]>([]);
+  const [resources, setResources] = useState<any[]>([]);
   const [sessions, setSessions] = useState<BrokerSession[]>([]);
   const [lastOpenResult, setLastOpenResult] = useState<OpenAppResponse | null>(null);
 
@@ -156,6 +158,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [apiFetch]
   );
 
+  const launchAwsConsole = useCallback(
+    async (resourceKey: string) => {
+      return apiFetch(`/api/aws/launch/${encodeURIComponent(resourceKey)}`, {
+        method: "POST",
+      });
+    },
+    [apiFetch]
+  );
+
   // Restore session from sessionStorage on mount
   useEffect(() => {
     const savedToken = sessionStorage.getItem("__broker_token");
@@ -182,6 +193,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         openApp,
         endSession,
         refreshSession,
+        launchAwsConsole,
       }}
     >
       {children}

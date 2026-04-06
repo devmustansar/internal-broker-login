@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { appAccessService } from "@/server/services/app-access.service";
 import { getAuthContext, unauthorized, serverError } from "@/lib/api-helpers";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,17 +11,26 @@ export async function GET(req: NextRequest) {
     const user = await appAccessService.getUserById(auth.userId);
     if (!user) return unauthorized("User not found");
 
-    const allResources = await appAccessService.getAllResources();
+    const allWebResources = await appAccessService.getAllResources();
+    const allAwsResources = await prisma.awsResource.findMany({
+      where: { isActive: true },
+    });
 
-    // Filter to only resources the user can access
-    const accessible =
+    const accessibleWeb =
       user.allowedResourceKeys.includes("*")
-        ? allResources
-        : allResources.filter((r) =>
+        ? allWebResources
+        : allWebResources.filter((r) =>
             user.allowedResourceKeys.includes(r.resourceKey)
           );
 
-    return NextResponse.json(accessible);
+    const accessibleAws =
+      user.allowedResourceKeys.includes("*")
+        ? allAwsResources
+        : allAwsResources.filter((r: any) =>
+            user.allowedResourceKeys.includes(r.resourceKey)
+          );
+
+    return NextResponse.json([...accessibleWeb, ...accessibleAws]);
   } catch (err) {
     return serverError(err);
   }

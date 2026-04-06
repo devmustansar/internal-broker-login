@@ -196,8 +196,10 @@ class JsonLoginAdapter implements ILoginAdapter {
       let token: string | undefined;
       try {
         const text = await res.text();
-        // console.log(`[JsonLoginAdapter] JSON Response Body:`, text);
+        console.log(`[JsonLoginAdapter] JSON Response Body:`, text);
         const json = JSON.parse(text);
+
+        console.log(`[JsonLoginAdapter] JSON Response Body:`, json);
 
         const extractionPath = options?.tokenExtractionPath as string | undefined;
 
