@@ -1,6 +1,6 @@
 import type { BrokerSession, OpenAppRequest, OpenAppResponse, InternalUser, Resource, ManagedAccount } from "@/types";
 import { v4 as uuidv4 } from "uuid";
-import { vaultService } from "./vault.service";
+import { secretManager } from "@/server/secrets/secret-manager";
 import { getLoginAdapter } from "@/server/adapters/login.adapter";
 import { getSessionRepository } from "@/server/repositories/session.repository";
 import { appAccessService } from "./app-access.service";
@@ -68,8 +68,19 @@ export const brokerSessionService = {
       throw new Error(`No active managed account for resource '${resourceKey}'`);
     }
 
-    // 5. Fetch credentials from Vault
-    const credential = await vaultService.getCredential(managedAccount.vaultPath);
+    // 5. Fetch credentials (decrypted) from secrets provider
+    // The secretManager reads from DB (encrypted) or Vault based on SECRET_PROVIDER env.
+    // `managedAccount.vaultPath` is repurposed as the secretRef key.
+    const secret = await secretManager.getSecret(
+      managedAccount.vaultPath,
+      "web_basic_credentials"
+    );
+    const credential = {
+      email: secret.payload.username,
+      password: secret.payload.password,
+      loginType: "password",
+      extra: secret.payload.extra,
+    };
     auditLogService.log({
       action: "vault_credential_fetched",
       internalUserId,

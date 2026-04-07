@@ -181,6 +181,7 @@ class JsonLoginAdapter implements ILoginAdapter {
         [passwordKey]: credential.password,
       };
 
+      console.log(`[JsonLoginAdapter] Payload:`, payload);
       const res = await fetch(loginUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

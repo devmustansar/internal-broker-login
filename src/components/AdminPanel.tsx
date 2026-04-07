@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Box, 
   Container, 
@@ -67,7 +67,32 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
     passwordField: initialData?.passwordField || "",
     environment: initialData?.environment || "production",
     description: initialData?.description || "",
+    managedUsername: "",
+    managedPassword: "",
   });
+
+  useEffect(() => {
+    const fetchCredentials = async () => {
+      const secretRef = initialData?.accounts?.[0]?.vaultPath || `secret/apps/${initialData?.resourceKey}/admin`;
+      if (!secretRef || !initialData) return;
+      
+      try {
+        const res = await fetch(`/api/admin/secrets?secretRef=${encodeURIComponent(secretRef)}&kind=web_basic_credentials`);
+        if (res.ok) {
+          const secret = await res.json();
+          setFormData(prev => ({
+            ...prev,
+            managedUsername: secret.payload?.username || "",
+            managedPassword: secret.payload?.password || "",
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to fetch app credentials:", err);
+      }
+    };
+
+    fetchCredentials();
+  }, [initialData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,6 +106,28 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Failed to ${isEdit ? "update" : "create"} app`);
+      
+      // Save vaulted credentials if provided
+      if (formData.managedUsername || formData.managedPassword) {
+        const secretRef = data.accounts?.[0]?.vaultPath || `secret/apps/${formData.resourceKey}/admin`;
+        await fetch("/api/admin/secrets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            secretRef,
+            kind: "web_basic_credentials",
+            payload: {
+              username: formData.managedUsername,
+              password: formData.managedPassword,
+            },
+            metadata: {
+              resourceKey: formData.resourceKey,
+              label: `${formData.name} Admin`
+            }
+          }),
+        });
+      }
+
       onSuccess(`App "${data.name}" ${isEdit ? "updated" : "created"} successfully!`);
       
       if (!isEdit) {
@@ -97,6 +144,8 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
           passwordField: "",
           environment: "production",
           description: "",
+          managedUsername: "",
+          managedPassword: "",
         });
       } else if (onCancelEdit) {
         onCancelEdit();
@@ -219,6 +268,46 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
           />
         </Grid>
 
+        {/* Managed Credentials Section */}
+        <Grid size={12}>
+          <Divider sx={{ my: 4 }}>
+            <Chip 
+              icon={<Lock size={14} />} 
+              label="VAULTED CREDENTIALS" 
+              sx={{ fontWeight: 800, fontSize: '0.65rem', letterSpacing: '0.05em' }} 
+            />
+          </Divider>
+          <Alert icon={<ShieldCheck size={20} />} severity="info" sx={{ mb: 4, borderRadius: 3, bgcolor: alpha(theme.palette.primary.main, 0.05), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}` }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.light' }}>
+              These credentials are encrypted at rest using AES-256-GCM. They are used by the broker to authenticate with the upstream application.
+            </Typography>
+          </Alert>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>BROKER USERNAME</Typography>
+          <TextField
+            fullWidth
+            variant="outlined"
+            placeholder="svc-broker@company.com"
+            value={formData.managedUsername}
+            onChange={(e) => setFormData({ ...formData, managedUsername: e.target.value })}
+            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>BROKER PASSWORD</Typography>
+          <TextField
+            fullWidth
+            type="password"
+            variant="outlined"
+            placeholder="••••••••••••"
+            value={formData.managedPassword}
+            onChange={(e) => setFormData({ ...formData, managedPassword: e.target.value })}
+            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+          />
+        </Grid>
+
         <Grid size={12}>
           <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
             <Button
@@ -265,7 +354,32 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
     stsStrategy: initialData?.stsStrategy || "assume_role",
     environment: initialData?.environment || "production",
     description: initialData?.description || "",
+    accessKeyId: "",
+    secretAccessKey: "",
   });
+
+  useEffect(() => {
+    const fetchCredentials = async () => {
+      const secretRef = formData.brokerCredentialRef || initialData?.brokerCredentialRef;
+      if (!secretRef || !initialData) return;
+      
+      try {
+        const res = await fetch(`/api/admin/secrets?secretRef=${encodeURIComponent(secretRef)}&kind=aws_iam_credentials`);
+        if (res.ok) {
+          const secret = await res.json();
+          setFormData(prev => ({
+            ...prev,
+            accessKeyId: secret.payload?.accessKeyId || "",
+            secretAccessKey: secret.payload?.secretAccessKey || "",
+          }));
+        }
+      } catch (err) {
+        console.error("Failed to fetch AWS credentials:", err);
+      }
+    };
+
+    fetchCredentials();
+  }, [initialData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -279,6 +393,27 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Failed to ${isEdit ? "update" : "create"} AWS resource`);
+      
+      // Save vaulted credentials if provided
+      if (formData.accessKeyId || formData.secretAccessKey) {
+        await fetch("/api/admin/secrets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            secretRef: formData.brokerCredentialRef,
+            kind: "aws_iam_credentials",
+            payload: {
+              accessKeyId: formData.accessKeyId,
+              secretAccessKey: formData.secretAccessKey,
+            },
+            metadata: {
+              resourceKey: formData.resourceKey,
+              label: `${formData.name} IAM Broker`
+            }
+          }),
+        });
+      }
+
       onSuccess(`AWS Resource "${data.name}" ${isEdit ? "updated" : "created"} successfully!`);
       
       if (!isEdit) {
@@ -296,6 +431,8 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
           stsStrategy: "assume_role",
           environment: "production",
           description: "",
+          accessKeyId: "",
+          secretAccessKey: "",
         });
       } else if (onCancelEdit) {
         onCancelEdit();
@@ -402,6 +539,41 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
             variant="outlined"
             value={formData.sessionDurationSeconds}
             onChange={(e) => setFormData({ ...formData, sessionDurationSeconds: Number(e.target.value) })}
+            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+          />
+        </Grid>
+
+        {/* IAM Credentials Section */}
+        <Grid size={12}>
+          <Divider sx={{ my: 4 }}>
+            <Chip 
+              icon={<ShieldCheck size={14} />} 
+              label="IAM BROKER CREDENTIALS" 
+              sx={{ fontWeight: 800, fontSize: '0.65rem', letterSpacing: '0.05em' }} 
+            />
+          </Divider>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>ACCESS KEY ID</Typography>
+          <TextField
+            fullWidth
+            variant="outlined"
+            placeholder="AKIA..."
+            value={formData.accessKeyId}
+            onChange={(e) => setFormData({ ...formData, accessKeyId: e.target.value })}
+            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>SECRET ACCESS KEY</Typography>
+          <TextField
+            fullWidth
+            type="password"
+            variant="outlined"
+            placeholder="••••••••••••"
+            value={formData.secretAccessKey}
+            onChange={(e) => setFormData({ ...formData, secretAccessKey: e.target.value })}
             sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
           />
         </Grid>

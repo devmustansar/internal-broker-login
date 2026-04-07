@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     if (auth.role !== "admin") return forbidden();
 
     const resources = await prisma.resource.findMany({
+      include: { accounts: true },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(resources);

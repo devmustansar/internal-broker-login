@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import type { AwsResourceConfig, AwsFederationResult, AwsAuditDetails } from "@/types";
 import { auditLogService } from "./audit.service";
 import { awsFederationService, AwsStsError, AwsFederationError, AwsValidationError } from "./aws-federation.service";
-import { secretsProvider } from "@/server/secrets/secrets.provider";
+import { secretManager, SecretNotFoundError } from "@/server/secrets/secret-manager";
 import { appAccessService } from "./app-access.service";
 
 // ─── AWS Broker Service ───────────────────────────────────────────────────────
@@ -120,7 +120,11 @@ export const awsBrokerService = {
     //       switch to HashiCorpVaultSecretsProvider — no changes needed here.
     let brokerCreds;
     try {
-      brokerCreds = await secretsProvider.getAwsBrokerCredentials(config.brokerCredentialRef);
+      const secret = await secretManager.getSecret(
+        config.brokerCredentialRef,
+        "aws_iam_credentials"
+      );
+      brokerCreds = secret.payload;
       auditLogService.log({
         action: "aws_secrets_loaded",
         internalUserId,

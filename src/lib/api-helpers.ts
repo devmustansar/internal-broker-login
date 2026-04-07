@@ -54,3 +54,10 @@ export function serverError(err: unknown): NextResponse {
   console.error("[API Error]", message);
   return NextResponse.json({ error: message }, { status: 500 });
 }
+
+/**
+ * Returns a 404 response.
+ */
+export function notFound(message = "Not found"): NextResponse {
+  return NextResponse.json({ error: message }, { status: 404 });
+}

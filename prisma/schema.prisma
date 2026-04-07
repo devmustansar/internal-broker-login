@@ -92,6 +92,69 @@ model AuditLog {
   outcome          String   // "success" | "failure" | "info"
 }
 
+// ─── Secrets Management ───────────────────────────────────────────────────────
+//
+// StoredSecret       — one row per live secret (payload is AES-256-GCM ciphertext)
+// StoredSecretRef    — routing table used by HybridSecretsProvider
+//
+// Design principles:
+//   • encryptedPayload is the ONLY column that holds sensitive data
+//   • All other columns are audit-safe and may appear in logs
+//   • deletedAt == null means the row is live (soft-delete pattern)
+//   • version increments on every updateSecret() call
+
+model StoredSecret {
+  id               String    @id @default(uuid())
+
+  /// Logical reference key used in resource config, e.g. "aws/broker/default"
+  /// Unique among non-deleted rows (enforced in application layer via unique index)
+  secretRef        String    @unique
+
+  /// SecretKind discriminant: aws_iam_credentials | web_basic_credentials | jira_api_token | generic_key_value
+  kind             String
+
+  /// AES-256-GCM ciphertext — format: "<iv_hex>:<authTag_hex>:<ciphertext_hex>"
+  /// Never logged, never returned to the frontend
+  encryptedPayload String
+
+  /// Audit-safe metadata (label, resourceKey, tags, notes, rotatedAt)
+  /// Stored as JSONB — never contains plaintext credentials
+  metadata         Json      @default("{}")
+
+  /// Which provider type created this row ("database" | "vault")
+  provider         String    @default("database")
+
+  /// Optimistic concurrency counter — incremented on each updateSecret()
+  version          Int       @default(1)
+
+  /// Soft-delete timestamp — null means the secret is live
+  deletedAt        DateTime?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([secretRef])
+  @@index([kind])
+  @@index([deletedAt])
+}
+
+/// Routing table for HybridSecretsProvider.
+/// Maps each secretRef → which backend (database | vault) owns it.
+/// Only needed in hybrid mode; safe to ignore in single-provider deployments.
+model StoredSecretRef {
+  id        String    @id @default(uuid())
+  secretRef String    @unique
+
+  /// "database" or "vault"
+  provider  String
+
+  /// Mirrors soft-delete state of the corresponding StoredSecret
+  deletedAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
 // ─── AWS Federation ───────────────────────────────────────────────────────────
 
 model AwsResource {
