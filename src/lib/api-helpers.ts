@@ -1,25 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authService } from "@/server/services/auth.service";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import type { AuthContext } from "@/types";
 
 /**
- * Extracts and verifies the JWT from the Authorization header or __broker_token cookie.
+ * Extracts and verifies the JWT from NextAuth.
  * Returns null if not authenticated.
  */
 export async function getAuthContext(
   req: NextRequest
 ): Promise<AuthContext | null> {
-  // Try Authorization: Bearer <token>
-  const authHeader = req.headers.get("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.slice(7);
-    return authService.verifyToken(token);
-  }
+  const session = await getServerSession(authOptions);
 
-  // Try cookie
-  const cookieToken = req.cookies.get("__broker_token")?.value;
-  if (cookieToken) {
-    return authService.verifyToken(cookieToken);
+  if (session?.user) {
+    return {
+      userId: (session.user as any).id,
+      email: session.user.email as string,
+      role: (session.user as any).role,
+    };
   }
 
   return null;

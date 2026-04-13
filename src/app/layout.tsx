@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import ThemeProviderWrapper from "@/components/ThemeProviderWrapper";
+import NextAuthProvider from "@/components/NextAuthProvider";
 
 export const metadata: Metadata = {
   title: "Internal Credentials Broker",
@@ -17,7 +18,9 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <ThemeProviderWrapper>
-          {children}
+          <NextAuthProvider>
+            {children}
+          </NextAuthProvider>
         </ThemeProviderWrapper>
       </body>
     </html>

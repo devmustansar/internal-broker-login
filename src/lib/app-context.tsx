@@ -9,10 +9,10 @@ import {
   type ReactNode,
 } from "react";
 import type { InternalUser, OpenAppResponse, BrokerSession, Resource } from "@/types";
+import { useSession, signOut } from "next-auth/react";
 
 interface AuthState {
-  user: InternalUser | null;
-  token: string | null;
+  user: any | null;
   isAuthenticated: boolean;
   isLoading: boolean;
 }
@@ -24,7 +24,7 @@ interface BrokerState {
 }
 
 interface AppContextValue extends AuthState, BrokerState {
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>; // Deprecated
   logout: () => Promise<void>;
   fetchResources: () => Promise<void>;
   openApp: (resourceKey: string) => Promise<OpenAppResponse>;
@@ -37,9 +37,11 @@ interface AppContextValue extends AuthState, BrokerState {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<InternalUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const { data: session, status } = useSession();
+  const user = session?.user || null;
+  const isAuthenticated = status === "authenticated";
+  const isLoading = status === "loading";
+
   const [resources, setResources] = useState<any[]>([]);
   const [sessions, setSessions] = useState<BrokerSession[]>([]);
   const [lastOpenResult, setLastOpenResult] = useState<OpenAppResponse | null>(null);
@@ -50,7 +52,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         "Content-Type": "application/json",
         ...(options.headers as Record<string, string>),
       };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
 
       const res = await fetch(path, { ...options, headers, credentials: "include" });
       if (!res.ok) {
@@ -59,43 +60,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       return res.json();
     },
-    [token]
+    []
   );
 
   const login = useCallback(async (email: string, password: string) => {
-    setIsLoading(true);
-    try {
-      const data = await fetch("/api/auth/mock-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-        credentials: "include",
-      }).then(async (r) => {
-        if (!r.ok) throw new Error((await r.json()).error ?? "Login failed");
-        return r.json();
-      });
-
-      setToken(data.token);
-      setUser(data.user);
-      // Persist token in sessionStorage for page refreshes
-      sessionStorage.setItem("__broker_token", data.token);
-      sessionStorage.setItem("__broker_user", JSON.stringify(data.user));
-    } finally {
-      setIsLoading(false);
-    }
+    // Deprecated. Handled by NextAuth signIn now.
+    console.warn("login is deprecated. Use signIn from next-auth/react directly.");
   }, []);
 
   const logout = useCallback(async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-    } catch {}
-    setToken(null);
-    setUser(null);
-    setResources([]);
-    setSessions([]);
-    setLastOpenResult(null);
-    sessionStorage.removeItem("__broker_token");
-    sessionStorage.removeItem("__broker_user");
+    await signOut({ callbackUrl: "/" });
   }, []);
 
   const fetchResources = useCallback(async () => {
@@ -117,7 +91,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return [
           {
             brokerSessionId: result.brokerSessionId,
-            internalUserId: user?.id ?? "",
+            internalUserId: (user as any)?.id ?? "",
             resourceKey: result.resourceKey,
             managedAccountKey: "",
             upstreamCookies: {},
@@ -167,22 +141,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [apiFetch]
   );
 
-  // Restore session from sessionStorage on mount
-  useEffect(() => {
-    const savedToken = sessionStorage.getItem("__broker_token");
-    const savedUser = sessionStorage.getItem("__broker_user");
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
-    }
-  }, []);
-
   return (
     <AppContext.Provider
       value={{
         user,
-        token,
-        isAuthenticated: !!user,
+        isAuthenticated,
         isLoading,
         resources,
         sessions,

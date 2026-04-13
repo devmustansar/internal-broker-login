@@ -1,47 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import { useApp } from "@/lib/app-context";
 import { 
   Box, 
   Container, 
   Typography, 
-  TextField, 
   Button, 
   Paper, 
-  IconButton, 
-  InputAdornment, 
-  Alert,
-  Fade,
-  Stack,
   alpha,
   useTheme
 } from "@mui/material";
-import { Shield, Mail, Key, Sparkles, ChevronRight } from "lucide-react";
+import { Shield, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
+import { signIn } from "next-auth/react";
 
 export default function LoginPage() {
-  const { login, isLoading } = useApp();
   const theme = useTheme();
-  const [email, setEmail] = useState("alice@company.com");
-  const [password, setPassword] = useState("password");
-  const [error, setError] = useState("");
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    try {
-      await login(email, password);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
-    }
-  };
-
-  const DEMO_USERS = [
-    { email: "alice@company.com", name: "Alice (Admin — all apps)" },
-    { email: "bob@company.com", name: "Bob (User — staging + dashboard)" },
-    { email: "carol@company.com", name: "Carol (Readonly)" },
-  ];
 
   return (
     <Box
@@ -56,7 +29,6 @@ export default function LoginPage() {
         overflow: 'hidden',
       }}
     >
-      {/* Background Effects */}
       <Box
         sx={{
           position: 'absolute',
@@ -77,7 +49,6 @@ export default function LoginPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          {/* Header */}
           <Box sx={{ textAlign: 'center', mb: 6 }}>
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
@@ -114,7 +85,6 @@ export default function LoginPage() {
             </Typography>
           </Box>
 
-          {/* Login Card */}
           <Paper
             elevation={1}
             sx={{
@@ -124,114 +94,22 @@ export default function LoginPage() {
               border: '1px solid rgba(255, 255, 255, 0.08)',
               backgroundColor: alpha(theme.palette.background.paper, 0.4),
               backdropFilter: 'blur(20px)',
+              textAlign: "center"
             }}
           >
-            <form onSubmit={handleSubmit}>
-              <Stack spacing={3}>
-                <Box>
-                  <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                    Identity
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    variant="outlined"
-                    placeholder="name@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <Mail size={18} color={theme.palette.text.secondary} />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Box>
+            <Typography variant="body1" sx={{ mb: 4, color: 'text.secondary' }}>
+              Authentication is strictly managed via your corporate Identity Provider.
+            </Typography>
 
-                <Box>
-                  <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                    Passkey
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    type="password"
-                    variant="outlined"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <Key size={18} color={theme.palette.text.secondary} />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Box>
-
-                {error && (
-                  <Fade in={!!error}>
-                    <Alert severity="error" variant="outlined" sx={{ borderRadius: 2, backgroundColor: alpha(theme.palette.error.main, 0.05) }}>
-                      {error}
-                    </Alert>
-                  </Fade>
-                )}
-
-                <Button
-                  fullWidth
-                  type="submit"
-                  variant="contained"
-                  size="large"
-                  disabled={isLoading}
-                  sx={{ py: 1.5, mt: 2 }}
-                >
-                  {isLoading ? 'Authenticating...' : 'Authenticate Securely'}
-                </Button>
-              </Stack>
-            </form>
-
-            {/* Quick Connect */}
-            <Box sx={{ mt: 5, pt: 4, borderTop: `1px solid ${theme.palette.divider}` }}>
-              <Typography variant="caption" sx={{ mb: 2, display: 'block', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                Relayer Handshake
-              </Typography>
-              <Stack spacing={1.5}>
-                {DEMO_USERS.map((user) => (
-                  <Button
-                    key={user.email}
-                    variant="text"
-                    onClick={() => {
-                      setEmail(user.email);
-                      setPassword("password");
-                    }}
-                    sx={{
-                      justifyContent: 'space-between',
-                      px: 2,
-                      py: 1.5,
-                      borderRadius: 3,
-                      backgroundColor: alpha(theme.palette.background.paper, 0.3),
-                      border: '1px solid transparent',
-                      '&:hover': {
-                        backgroundColor: alpha(theme.palette.background.paper, 0.6),
-                        borderColor: alpha(theme.palette.primary.main, 0.2),
-                        '& .chevron': { transform: 'translateX(4px)' }
-                      },
-                      color: 'text.primary',
-                    }}
-                    endIcon={<ChevronRight className="chevron" size={16} style={{ transition: 'transform 0.2s' }} />}
-                  >
-                    <Box sx={{ textAlign: 'left', flex: 1 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.light', display: 'block' }}>
-                        {user.email}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                        {user.name}
-                      </Typography>
-                    </Box>
-                  </Button>
-                ))}
-              </Stack>
-            </Box>
+            <Button
+              fullWidth
+              variant="contained"
+              size="large"
+              onClick={() => signIn("keycloak")}
+              sx={{ py: 1.5 }}
+            >
+              Sign In with Corporate SSO
+            </Button>
           </Paper>
 
           <Typography
@@ -245,7 +123,25 @@ export default function LoginPage() {
               textTransform: 'uppercase',
             }}
           >
-            Internal Network • Relayer v3.4
+            Internal Network • Relayer v3.5
+          </Typography>
+
+          <Typography
+            variant="caption"
+            sx={{
+              display: 'block',
+              textAlign: 'center',
+              color: 'text.secondary',
+              mt: 1,
+              fontSize: '0.6rem',
+              maxWidth: '300px',
+              mx: 'auto',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {typeof window !== 'undefined' ? window.navigator.userAgent : ''}
           </Typography>
         </motion.div>
       </Container>
