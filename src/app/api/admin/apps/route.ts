@@ -36,7 +36,22 @@ export async function POST(req: NextRequest) {
       return badRequest("Missing required fields (resourceKey, name, appHost)");
     }
 
-    const resource = await brokerSessionService.createResource(data);
+    // Strip frontend-only fields (managedUsername, managedPassword) before persisting
+    const resourceData = {
+      resourceKey: data.resourceKey,
+      name: data.name,
+      description: data.description,
+      appHost: data.appHost,
+      apiHost: data.apiHost,
+      loginUrl: data.loginUrl,
+      loginAdapter: data.loginAdapter,
+      tokenExtractionPath: data.tokenExtractionPath,
+      tokenValidationPath: data.tokenValidationPath,
+      usernameField: data.usernameField,
+      passwordField: data.passwordField,
+      environment: data.environment,
+    };
+    const resource = await brokerSessionService.createResource(resourceData);
 
     // Auto-create a default managed account for this application
     await brokerSessionService.addManagedAccount({
