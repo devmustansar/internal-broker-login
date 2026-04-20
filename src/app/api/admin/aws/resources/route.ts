@@ -7,18 +7,24 @@ import {
   badRequest,
   serverError,
 } from "@/lib/api-helpers";
+import { isAdminOrAbove, getOrgFilter, canManageOrg } from "@/lib/auth-policy";
+import { prisma } from "@/lib/prisma";
 
 /**
  * GET /api/admin/aws/resources
- * Lists all active AWS resources (admin only).
+ * Lists AWS resources scoped to the admin's organizations.
  */
 export async function GET(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);
     if (!auth) return unauthorized();
-    if (auth.role !== "admin") return forbidden();
+    if (!isAdminOrAbove(auth)) return forbidden();
 
-    const resources = await awsBrokerService.listAwsResources();
+    const resources = await prisma.awsResource.findMany({
+      where: { isActive: true, ...getOrgFilter(auth) },
+      include: { organization: true },
+      orderBy: { createdAt: "desc" },
+    });
     return NextResponse.json(resources);
   } catch (err) {
     return serverError(err);
@@ -27,30 +33,13 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/admin/aws/resources
- * Provisions a new AWS Console resource (admin only).
- *
- * Request body:
- * {
- *   "resourceKey": "aws-prod-readonly",
- *   "name": "AWS Prod (Read-Only)",
- *   "awsAccountId": "123456789012",
- *   "roleArn": "arn:aws:iam::123456789012:role/BrokerConsoleRole",
- *   "region": "us-east-1",
- *   "destination": "https://console.aws.amazon.com/",
- *   "issuer": "internal-broker",
- *   "sessionDurationSeconds": 3600,
- *   "externalId": "unique-external-id",          // optional
- *   "brokerCredentialRef": "aws/broker/default",
- *   "stsStrategy": "assume_role",
- *   "environment": "production",
- *   "description": "Read-only access to Prod AWS account"
- * }
+ * Provisions a new AWS Console resource (org-scoped).
  */
 export async function POST(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);
     if (!auth) return unauthorized();
-    if (auth.role !== "admin") return forbidden();
+    if (!isAdminOrAbove(auth)) return forbidden();
 
     const body = await req.json();
 
@@ -72,6 +61,11 @@ export async function POST(req: NextRequest) {
       return badRequest("resourceKey must only contain letters, numbers, hyphens, and underscores");
     }
 
+    // Validate org scope
+    if (body.organizationId && !canManageOrg(auth, body.organizationId)) {
+      return forbidden("You do not have access to this organization");
+    }
+
     const resource = await awsBrokerService.createAwsResource({
       resourceKey: body.resourceKey,
       name: body.name,
@@ -86,6 +80,7 @@ export async function POST(req: NextRequest) {
       brokerCredentialRef: body.brokerCredentialRef,
       stsStrategy: body.stsStrategy ?? "assume_role",
       environment: body.environment ?? "production",
+      organizationId: body.organizationId || null,
     });
 
     return NextResponse.json(resource, { status: 201 });
@@ -106,15 +101,25 @@ export async function PUT(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);
     if (!auth) return unauthorized();
-    if (auth.role !== "admin") return forbidden();
+    if (!isAdminOrAbove(auth)) return forbidden();
 
     const data = await req.json();
     if (!data.id || !data.resourceKey || !data.name || !data.awsAccountId || !data.roleArn || !data.brokerCredentialRef) {
       return badRequest("Missing required fields (id, resourceKey, name, awsAccountId, roleArn, brokerCredentialRef)");
     }
 
-    // Let's directly import prisma and update here since awsBrokerService doesn't have an update method yet
-    const { prisma } = await import("@/lib/prisma");
+    // Verify org scope on existing resource
+    const existing = await prisma.awsResource.findUnique({ where: { id: data.id } });
+    if (!existing) return badRequest("AWS Resource not found");
+    if (!canManageOrg(auth, existing.organizationId)) {
+      return forbidden("You do not have access to this resource's organization");
+    }
+
+    if (data.organizationId && data.organizationId !== existing.organizationId) {
+      if (!canManageOrg(auth, data.organizationId)) {
+        return forbidden("You do not have access to the target organization");
+      }
+    }
 
     const updated = await prisma.awsResource.update({
       where: { id: data.id },
@@ -133,6 +138,7 @@ export async function PUT(req: NextRequest) {
         stsStrategy: data.stsStrategy,
         isActive: data.isActive,
         environment: data.environment,
+        organizationId: data.organizationId ?? existing.organizationId,
       },
     });
 
@@ -141,4 +147,3 @@ export async function PUT(req: NextRequest) {
     return serverError(err);
   }
 }
-

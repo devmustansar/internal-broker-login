@@ -9,6 +9,7 @@ import {
   serverError,
   notFound,
 } from "@/lib/api-helpers";
+import { isAdminOrAbove } from "@/lib/auth-policy";
 
 /**
  * GET /api/admin/secrets?secretRef=xxx&kind=yyy
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);
     if (!auth) return unauthorized();
-    if (auth.role !== "admin") return forbidden();
+    if (!isAdminOrAbove(auth)) return forbidden();
 
     const { searchParams } = new URL(req.url);
     const secretRef = searchParams.get("secretRef");
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);
     if (!auth) return unauthorized();
-    if (auth.role !== "admin") return forbidden();
+    if (!isAdminOrAbove(auth)) return forbidden();
 
     const data = await req.json();
     const { secretRef, kind, payload, metadata } = data;
@@ -81,7 +82,7 @@ export async function DELETE(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);
     if (!auth) return unauthorized();
-    if (auth.role !== "admin") return forbidden();
+    if (!isAdminOrAbove(auth)) return forbidden();
 
     const { searchParams } = new URL(req.url);
     const secretRef = searchParams.get("secretRef");

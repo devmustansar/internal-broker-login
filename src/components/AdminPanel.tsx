@@ -24,7 +24,13 @@ import {
   useTheme,
   Fade,
   InputAdornment,
-  CircularProgress
+  CircularProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow
 } from "@mui/material";
 import { useApp } from "@/lib/app-context";
 import AdminResourcesList from "@/components/AdminResourcesList";
@@ -42,7 +48,8 @@ import {
   Lock,
   Globe,
   Server,
-  Fingerprint
+  Fingerprint,
+  Building2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -54,6 +61,7 @@ interface AdminActionProps {
 function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionProps & { initialData?: any; onCancelEdit?: () => void }) {
   const [loading, setLoading] = useState(false);
   const theme = useTheme();
+  const [organizations, setOrganizations] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     resourceKey: initialData?.resourceKey || "",
     name: initialData?.name || "",
@@ -67,9 +75,14 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
     passwordField: initialData?.passwordField || "",
     environment: initialData?.environment || "production",
     description: initialData?.description || "",
+    organizationId: initialData?.organizationId || "",
     managedUsername: "",
     managedPassword: "",
   });
+
+  useEffect(() => {
+    fetch("/api/admin/organizations").then(r => r.json()).then(setOrganizations).catch(console.error);
+  }, []);
 
   useEffect(() => {
     const fetchCredentials = async () => {
@@ -144,6 +157,7 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
           passwordField: "",
           environment: "production",
           description: "",
+          organizationId: "",
           managedUsername: "",
           managedPassword: "",
         });
@@ -182,6 +196,21 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             required
           />
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>ORGANIZATION</Typography>
+          <FormControl fullWidth>
+            <Select
+              value={formData.organizationId}
+              onChange={(e) => setFormData({ ...formData, organizationId: e.target.value })}
+              displayEmpty
+            >
+              <MenuItem value=""><em>Unassigned</em></MenuItem>
+              {organizations.map((org: any) => (
+                <MenuItem key={org.id} value={org.id}>{org.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Grid>
         <Grid size={12}>
           <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>APP HOST URL</Typography>
@@ -340,6 +369,7 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
 function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionProps & { initialData?: any; onCancelEdit?: () => void }) {
   const [loading, setLoading] = useState(false);
   const theme = useTheme();
+  const [organizations, setOrganizations] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     resourceKey: initialData?.resourceKey || "",
     name: initialData?.name || "",
@@ -354,9 +384,14 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
     stsStrategy: initialData?.stsStrategy || "assume_role",
     environment: initialData?.environment || "production",
     description: initialData?.description || "",
+    organizationId: initialData?.organizationId || "",
     accessKeyId: "",
     secretAccessKey: "",
   });
+
+  useEffect(() => {
+    fetch("/api/admin/organizations").then(r => r.json()).then(setOrganizations).catch(console.error);
+  }, []);
 
   useEffect(() => {
     const fetchCredentials = async () => {
@@ -431,6 +466,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
           stsStrategy: "assume_role",
           environment: "production",
           description: "",
+          organizationId: "",
           accessKeyId: "",
           secretAccessKey: "",
         });
@@ -460,6 +496,21 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
               sx: { fontFamily: 'monospace', '&.Mui-focused fieldset': { borderColor: theme.palette.warning.main } } 
             }}
           />
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>ORGANIZATION</Typography>
+          <FormControl fullWidth>
+            <Select
+              value={formData.organizationId}
+              onChange={(e) => setFormData({ ...formData, organizationId: e.target.value })}
+              displayEmpty
+            >
+              <MenuItem value=""><em>Unassigned</em></MenuItem>
+              {organizations.map((org: any) => (
+                <MenuItem key={org.id} value={org.id}>{org.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>TENANT NAME</Typography>
@@ -622,14 +673,21 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
 function CreateUserForm({ onSuccess, onError }: AdminActionProps) {
   const [loading, setLoading] = useState(false);
   const theme = useTheme();
+  const { user } = useApp();
+  const [organizations, setOrganizations] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     email: "",
     name: "",
     password: "",
     role: "user",
     allowedResourceKeys: [] as string[],
+    organizationIds: [] as string[],
   });
   const [resourceInput, setResourceInput] = useState("");
+
+  useEffect(() => {
+    fetch("/api/admin/organizations").then(r => r.json()).then(setOrganizations).catch(console.error);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -649,6 +707,7 @@ function CreateUserForm({ onSuccess, onError }: AdminActionProps) {
         password: "",
         role: "user",
         allowedResourceKeys: [],
+        organizationIds: [],
       });
       setResourceInput("");
     } catch (err: any) {
@@ -729,6 +788,7 @@ function CreateUserForm({ onSuccess, onError }: AdminActionProps) {
               <MenuItem value="user">Standard Developer</MenuItem>
               <MenuItem value="admin">Cluster Administrator</MenuItem>
               <MenuItem value="readonly">Read-Only Auditor</MenuItem>
+              {user?.role === "super_admin" && <MenuItem value="super_admin">Super Administrator</MenuItem>}
             </Select>
           </FormControl>
         </Grid>
@@ -758,6 +818,43 @@ function CreateUserForm({ onSuccess, onError }: AdminActionProps) {
             />
             <Button variant="outlined" onClick={addResource} sx={{ px: 3, borderRadius: 3 }}>Assign Key</Button>
           </Stack>
+        </Grid>
+        <Grid size={12}>
+          <Typography variant="caption" sx={{ mb: 2, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>ORGANIZATION MEMBERSHIP</Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 3, p: 2, borderRadius: 3, bgcolor: alpha(theme.palette.background.paper, 0.4), border: `1px solid ${theme.palette.divider}` }}>
+            {formData.organizationIds.map((orgId) => {
+              const org = organizations.find((o: any) => o.id === orgId);
+              return (
+                <Chip
+                  key={orgId}
+                  label={org?.name || orgId}
+                  onDelete={() => setFormData({ ...formData, organizationIds: formData.organizationIds.filter((id) => id !== orgId) })}
+                  icon={<Building2 size={14} />}
+                  sx={{ borderRadius: 2, fontWeight: 700, bgcolor: alpha(theme.palette.success.main, 0.1), color: 'success.light' }}
+                />
+              );
+            })}
+            {formData.organizationIds.length === 0 && (
+              <Typography variant="caption" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>No organizations assigned yet.</Typography>
+            )}
+          </Box>
+          <FormControl fullWidth>
+            <Select
+              value=""
+              onChange={(e) => {
+                const orgId = e.target.value as string;
+                if (orgId && !formData.organizationIds.includes(orgId)) {
+                  setFormData({ ...formData, organizationIds: [...formData.organizationIds, orgId] });
+                }
+              }}
+              displayEmpty
+            >
+              <MenuItem value="" disabled><em>Select organization to assign</em></MenuItem>
+              {organizations.filter((o: any) => !formData.organizationIds.includes(o.id)).map((org: any) => (
+                <MenuItem key={org.id} value={org.id}>{org.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </Grid>
         <Grid size={12}>
           <Button
@@ -847,6 +944,141 @@ function AssignAppForm({ onSuccess, onError }: AdminActionProps) {
   );
 }
 
+function OrganizationsPanel({ onSuccess, onError }: AdminActionProps) {
+  const [orgs, setOrgs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({ name: "", description: "" });
+  const theme = useTheme();
+
+  const fetchOrgs = async () => {
+    try {
+      const res = await fetch("/api/admin/organizations");
+      if (res.ok) setOrgs(await res.json());
+    } catch (err) {
+      console.error("Failed to fetch organizations:", err);
+    }
+  };
+
+  useEffect(() => { fetchOrgs(); }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/organizations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to create organization");
+      onSuccess(`Organization "${data.name}" created successfully!`);
+      setFormData({ name: "", description: "" });
+      fetchOrgs();
+    } catch (err: any) {
+      onError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Stack spacing={8}>
+      <Box>
+        <Typography variant="caption" sx={{ mb: 6, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'primary.main', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase' }}>
+          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'primary.main' }} />
+          Create Organization
+        </Typography>
+        <Box component="form" onSubmit={handleSubmit}>
+          <Grid container spacing={4}>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>ORGANIZATION NAME</Typography>
+              <TextField
+                fullWidth
+                variant="outlined"
+                placeholder="e.g. CodingCops"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+              />
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>DESCRIPTION</Typography>
+              <TextField
+                fullWidth
+                variant="outlined"
+                placeholder="Brief description of this organization"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              />
+            </Grid>
+            <Grid size={12}>
+              <Button
+                fullWidth
+                type="submit"
+                variant="contained"
+                size="large"
+                disabled={loading}
+                sx={{ py: 2, fontWeight: 800 }}
+                startIcon={loading ? <CircularProgress size={20} /> : <Building2 size={20} />}
+              >
+                Create Organization
+              </Button>
+            </Grid>
+          </Grid>
+        </Box>
+      </Box>
+
+      <Box>
+        <Typography variant="caption" sx={{ mb: 4, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'text.secondary', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase', letterSpacing: '0.15em' }}>
+          <Building2 size={16} /> Registered Organizations
+        </Typography>
+        <TableContainer component={Paper} elevation={0} sx={{ bgcolor: 'transparent', border: `1px solid ${theme.palette.divider}`, borderRadius: 4, overflow: 'hidden' }}>
+          <Table>
+            <TableHead sx={{ bgcolor: alpha(theme.palette.background.paper, 0.5) }}>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>NAME</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>DESCRIPTION</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>RESOURCES</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>MEMBERS</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {orgs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} align="center" sx={{ py: 6 }}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>No organizations created yet.</Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                orgs.map((org) => (
+                  <TableRow key={org.id} sx={{ '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.02) } }}>
+                    <TableCell sx={{ py: 2 }}>
+                      <Stack direction="row" spacing={1.5} alignItems="center">
+                        <Building2 size={16} color={theme.palette.primary.main} />
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{org.name}</Typography>
+                      </Stack>
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>{org.description || '—'}</Typography>
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }}>
+                      <Chip label={`${(org._count?.resources || 0) + (org._count?.awsResources || 0)} resources`} size="small" sx={{ fontWeight: 700, fontSize: '0.65rem', bgcolor: alpha(theme.palette.primary.main, 0.1), color: 'primary.light' }} />
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }}>
+                      <Chip label={`${org._count?.users || 0} members`} size="small" sx={{ fontWeight: 700, fontSize: '0.65rem', bgcolor: alpha(theme.palette.success.main, 0.1), color: 'success.light' }} />
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
+    </Stack>
+  );
+}
+
 export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState(0);
   const [appTypeToggle, setAppTypeToggle] = useState<"web" | "aws">("web");
@@ -869,7 +1101,7 @@ export default function AdminPanel() {
   };
 
   const { user } = useApp();
-  if (user?.role !== "admin") {
+  if (user?.role !== "admin" && user?.role !== "super_admin") {
     return (
       <Container maxWidth="sm" sx={{ mt: 10 }}>
         <Paper elevation={1} sx={{ p: 6, textAlign: 'center', borderRadius: 6, bgcolor: alpha(theme.palette.error.main, 0.05), border: `1px solid ${alpha(theme.palette.error.main, 0.1)}` }}>
@@ -899,9 +1131,10 @@ export default function AdminPanel() {
             '& .MuiTab-root': { fontWeight: 800, fontSize: '0.75rem', letterSpacing: '0.05em', px: 3 }
           }}
         >
-          <Tab icon={<Rocket size={18} />} iconPosition="start" label="PROVISION" />
-          <Tab icon={<Combine size={18} />} iconPosition="start" label="RESOURCES" />
-          <Tab icon={<Users size={18} />} iconPosition="start" label="IDENTITIES" />
+          <Tab icon={<Rocket size={18} />} iconPosition="start" label="PROVISION" value={0} />
+          <Tab icon={<Combine size={18} />} iconPosition="start" label="RESOURCES" value={1} />
+          <Tab icon={<Users size={18} />} iconPosition="start" label="IDENTITIES" value={2} />
+          {user?.role === "super_admin" && <Tab icon={<Building2 size={18} />} iconPosition="start" label="ORGANIZATIONS" value={3} />}
         </Tabs>
       </Box>
 
@@ -1017,6 +1250,12 @@ export default function AdminPanel() {
                 <AssignAppForm onSuccess={handleSuccess} onError={handleError} />
               </Box>
             </Stack>
+          </motion.div>
+        )}
+
+        {activeTab === 3 && user?.role === "super_admin" && (
+          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}>
+            <OrganizationsPanel onSuccess={handleSuccess} onError={handleError} />
           </motion.div>
         )}
       </Paper>

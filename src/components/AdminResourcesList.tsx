@@ -98,6 +98,7 @@ export default function AdminResourcesList({
                 <TableRow>
                   <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>IDENTIFIER</TableCell>
                   <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>TOPOLOGY KEY</TableCell>
+                  <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>ORGANIZATION</TableCell>
                   <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>STRATEGY</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>ACTIONS</TableCell>
                 </TableRow>
@@ -117,6 +118,9 @@ export default function AdminResourcesList({
                       </TableCell>
                       <TableCell sx={{ py: 2 }}>
                         <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'primary.light', fontWeight: 600 }}>{res.resourceKey}</Typography>
+                      </TableCell>
+                      <TableCell sx={{ py: 2 }}>
+                        <Chip label={res.organization?.name || 'Unassigned'} size="small" variant="outlined" sx={{ border: 'none', bgcolor: res.organization ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.text.secondary, 0.1), height: 24, fontSize: '0.65rem', fontWeight: 700, color: res.organization ? 'success.light' : 'text.secondary' }} />
                       </TableCell>
                       <TableCell sx={{ py: 2 }}>
                         <Chip label={res.loginAdapter} size="small" variant="outlined" sx={{ border: 'none', bgcolor: alpha(theme.palette.background.paper, 0.4), height: 24, fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.05em' }} />
@@ -157,6 +161,7 @@ export default function AdminResourcesList({
                 <TableRow>
                   <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>TENANT NAME</TableCell>
                   <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>ACCOUNT ID</TableCell>
+                  <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>ORGANIZATION</TableCell>
                   <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>CLUSTER KEY</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>ACTIONS</TableCell>
                 </TableRow>
@@ -176,6 +181,9 @@ export default function AdminResourcesList({
                       </TableCell>
                       <TableCell sx={{ py: 2 }}>
                         <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', fontWeight: 600 }}>{res.awsAccountId}</Typography>
+                      </TableCell>
+                      <TableCell sx={{ py: 2 }}>
+                        <Chip label={res.organization?.name || 'Unassigned'} size="small" variant="outlined" sx={{ border: 'none', bgcolor: res.organization ? alpha(theme.palette.success.main, 0.1) : alpha(theme.palette.text.secondary, 0.1), height: 24, fontSize: '0.65rem', fontWeight: 700, color: res.organization ? 'success.light' : 'text.secondary' }} />
                       </TableCell>
                       <TableCell sx={{ py: 2 }}>
                         <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'warning.main', fontWeight: 600 }}>{res.resourceKey}</Typography>

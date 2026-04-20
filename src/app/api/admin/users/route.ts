@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { brokerSessionService } from "@/server/services/broker-session.service";
 import {
   getAuthContext,
   unauthorized,
@@ -7,29 +6,54 @@ import {
   badRequest,
   serverError,
 } from "@/lib/api-helpers";
+import { isAdminOrAbove, canManageOrg, isSuperAdmin } from "@/lib/auth-policy";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);
     if (!auth) return unauthorized();
-    if (auth.role !== "admin") return forbidden();
+    if (!isAdminOrAbove(auth)) return forbidden();
 
     const data = await req.json();
     if (!data.email || !data.name || !data.role) {
       return badRequest("Missing required fields (email, name, role)");
     }
 
-    // Since it's a POC, we just store it plainly in passwordHash or hash it.
-    // We'll store directly so mock login can verify it smoothly.
-    const createData = {
-      ...data,
-      passwordHash: data.password || "password123", // fallback
-    };
-    
-    // remove plain password from prisma data object
-    delete createData.password;
+    // Only super_admin can create other super_admins
+    if (data.role === "super_admin" && !isSuperAdmin(auth)) {
+      return forbidden("Only super admins can create super admin users");
+    }
 
-    const user = await brokerSessionService.createUser(createData);
+    // Validate org assignments — admin can only assign their own orgs
+    const organizationIds: string[] = data.organizationIds || [];
+    if (!isSuperAdmin(auth)) {
+      for (const orgId of organizationIds) {
+        if (!canManageOrg(auth, orgId)) {
+          return forbidden(`You do not have access to organization ${orgId}`);
+        }
+      }
+    }
+
+    const user = await prisma.user.create({
+      data: {
+        email: data.email,
+        name: data.name,
+        role: data.role,
+        allowedResourceKeys: data.allowedResourceKeys || [],
+        passwordHash: data.password || "password123",
+        organizations: {
+          create: organizationIds.map((orgId: string) => ({
+            organizationId: orgId,
+          })),
+        },
+      },
+      include: {
+        organizations: {
+          include: { organization: true },
+        },
+      },
+    });
 
     return NextResponse.json(user, { status: 201 });
   } catch (err) {

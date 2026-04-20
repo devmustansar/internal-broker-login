@@ -273,6 +273,7 @@ export const awsBrokerService = {
     brokerCredentialRef: string;
     stsStrategy?: string;
     environment?: string;
+    organizationId?: string | null;
   }) {
     return prisma.awsResource.create({ data });
   },

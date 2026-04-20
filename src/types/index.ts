@@ -4,8 +4,15 @@ export interface InternalUser {
   id: string;
   email: string;
   name: string;
-  role: "admin" | "user" | "readonly";
+  role: "super_admin" | "admin" | "user" | "readonly";
   allowedResourceKeys: string[]; // '*' means all
+  createdAt: string;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  description?: string;
   createdAt: string;
 }
 
@@ -26,6 +33,7 @@ export interface Resource {
   isActive: boolean;
   description?: string;
   iconUrl?: string;
+  organizationId?: string | null;
 }
 
 export interface ManagedAccount {
@@ -127,6 +135,7 @@ export interface AuthContext {
   userId: string;
   email: string;
   role: InternalUser["role"];
+  organizationIds: string[];
   iat?: number;
   exp?: number;
 }
