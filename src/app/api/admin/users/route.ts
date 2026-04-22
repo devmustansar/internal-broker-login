@@ -9,6 +9,65 @@ import {
 import { isAdminOrAbove, canManageOrg, isSuperAdmin } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
 
+/**
+ * GET /api/admin/users
+ * Lists all users with their orgs, resource keys, and per-resource AWS policies.
+ * Scoped to the admin's orgs unless super_admin.
+ */
+export async function GET(req: NextRequest) {
+  try {
+    const auth = await getAuthContext(req);
+    if (!auth) return unauthorized();
+    if (!isAdminOrAbove(auth)) return forbidden();
+
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        allowedResourceKeys: true,
+        createdAt: true,
+        // UserOrganization join
+        organizations: {
+          include: { organization: true },
+        },
+        // Per-resource AWS policy mappings
+        awsPolicies: {
+          include: {
+            awsResource: {
+              select: {
+                id: true,
+                resourceKey: true,
+                name: true,
+                availablePolicyArns: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // Filter by org scope for non-super-admins
+    if (!isSuperAdmin(auth)) {
+      const adminOrgs = new Set(auth.organizationIds || []);
+      const filtered = users.filter((u) =>
+        u.organizations.some((o) => adminOrgs.has(o.organizationId))
+      );
+      return NextResponse.json(filtered);
+    }
+
+    return NextResponse.json(users);
+  } catch (err) {
+    return serverError(err);
+  }
+}
+
+/**
+ * POST /api/admin/users
+ * Creates a new user with optional org memberships.
+ */
 export async function POST(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);

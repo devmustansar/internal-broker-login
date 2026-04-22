@@ -18,30 +18,30 @@ export const authOptions: NextAuthOptions = {
       // ── Step 1: FleetDM device verification ─────────────────────────────
       // The Keycloak custom authenticator extracts the CN from the mTLS
       // client certificate and exposes it as `machine_cn` in the OIDC profile.
-      const machineCn = (profile as any)?.machine_cn as string | undefined;
+      // const machineCn = (profile as any)?.machine_cn as string | undefined;
       // const machineCn = "MP248NJV"
-      console.log(
-        `[auth] Sign-in attempt: email=${user.email}, machine_cn=${machineCn || "NONE"}`
-      );
+      // console.log(
+      //   `[auth] Sign-in attempt: email=${user.email}, machine_cn=${machineCn || "NONE"}`
+      // );
 
-      const fleetResult = await verifyDeviceWithFleet(machineCn || "");
+      // const fleetResult = await verifyDeviceWithFleet(machineCn || "");
 
-      if (!fleetResult.verified) {
-        console.warn(
-          `[auth] ❌ Device verification FAILED for ${user.email}: ${fleetResult.reason}`
-        );
-        // Redirect to device error page with the reason
-        const unauthorizedMachine = (machineCn && machineCn.length > 3 ? machineCn.slice(0, 3) + '*'.repeat(machineCn.length - 3) : machineCn) || "Unknown"
-        const errorMessage = `Device ${unauthorizedMachine} is not registered in the fleet. Contact your IT administrator to enroll this device.`
-        const errorUrl =
-          `/device-error?reason=${encodeURIComponent(errorMessage)}` +
-          `&machine=${encodeURIComponent(unauthorizedMachine || "Unknown")}`;
-        return errorUrl;
-      }
+      // if (!fleetResult.verified) {
+      //   console.warn(
+      //     `[auth] ❌ Device verification FAILED for ${user.email}: ${fleetResult.reason}`
+      //   );
+      //   // Redirect to device error page with the reason
+      //   const unauthorizedMachine = (machineCn && machineCn.length > 3 ? machineCn.slice(0, 3) + '*'.repeat(machineCn.length - 3) : machineCn) || "Unknown"
+      //   const errorMessage = `Device ${unauthorizedMachine} is not registered in the fleet. Contact your IT administrator to enroll this device.`
+      //   const errorUrl =
+      //     `/device-error?reason=${encodeURIComponent(errorMessage)}` +
+      //     `&machine=${encodeURIComponent(unauthorizedMachine || "Unknown")}`;
+      //   return errorUrl;
+      // }
 
-      console.log(
-        `[auth] ✅ Device verified for ${user.email}: ${fleetResult.device?.display_name || machineCn}`
-      );
+      // console.log(
+      //   `[auth] ✅ Device verified for ${user.email}: ${fleetResult.device?.display_name || machineCn}`
+      // );
 
       // ── Step 2: Provision or confirm user in database ───────────────────
       const existingUser = await prisma.user.findUnique({

@@ -115,6 +115,23 @@ export const awsBrokerService = {
       stsStrategy: awsResource.stsStrategy as AwsResourceConfig["stsStrategy"],
     };
 
+    // ── Step 3b: Look up user-specific session policies ──────────────────────
+    const userPolicy = await prisma.userAwsPolicy.findUnique({
+      where: {
+        userId_awsResourceId: {
+          userId: internalUserId,
+          awsResourceId: awsResource.id,
+        },
+      },
+    });
+
+    if (userPolicy && userPolicy.policyArns.length > 0) {
+      config.policyArns = userPolicy.policyArns;
+      console.log(
+        `[aws-broker] Applying ${userPolicy.policyArns.length} session policies for user ${user.email} on ${resourceKey}`
+      );
+    }
+
     // ── Step 4: Load broker IAM credentials from SecretsProvider ─────────────
     // TODO: When integrating real Vault, secretsProvider will transparently
     //       switch to HashiCorpVaultSecretsProvider — no changes needed here.
@@ -274,6 +291,7 @@ export const awsBrokerService = {
     stsStrategy?: string;
     environment?: string;
     organizationId?: string | null;
+    availablePolicyArns?: string[];
   }) {
     return prisma.awsResource.create({ data });
   },

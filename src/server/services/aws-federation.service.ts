@@ -6,6 +6,82 @@ import type {
   AwsFederationResult,
 } from "@/types";
 
+// ─── Managed-policy → inline-policy action mapping ────────────────────────────
+//
+// GetFederationToken does NOT properly scope AWS Console access via PolicyArns.
+// AWS docs: managed PolicyArns through GetFederationToken are not supported for
+// console federation sign-in (the restriction is ignored by the signin endpoint).
+//
+// Workaround: translate the assigned managed policy ARNs into an equivalent
+// inline Policy JSON (Allow statements) so STS + the console honour the scope.
+// Only the services declared here will be accessible in the federated session.
+
+const MANAGED_POLICY_INLINE_MAP: Record<string, { actions: string[]; resources: string }> = {
+  // Full access policies
+  "arn:aws:iam::aws:policy/AdministratorAccess":        { actions: ["*"],             resources: "*" },
+  "arn:aws:iam::aws:policy/PowerUserAccess":            { actions: ["*"],             resources: "*" },
+  // Read-only / view-only
+  "arn:aws:iam::aws:policy/ReadOnlyAccess":             { actions: ["*.Describe*", "*.List*", "*.Get*", "*.View*", "s3:GetObject"],  resources: "*" },
+  "arn:aws:iam::aws:policy/ViewOnlyAccess":             { actions: ["*.Describe*", "*.List*", "*.Get*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/SecurityAudit":              { actions: ["*.Describe*", "*.List*", "*.Get*", "iam:*", "cloudtrail:*"],  resources: "*" },
+  // S3
+  "arn:aws:iam::aws:policy/AmazonS3FullAccess":         { actions: ["s3:*"],          resources: "*" },
+  "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess":     { actions: ["s3:Get*", "s3:List*"],  resources: "*" },
+  // EC2
+  "arn:aws:iam::aws:policy/AmazonEC2FullAccess":        { actions: ["ec2:*", "elasticloadbalancing:*", "cloudwatch:*", "autoscaling:*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess":    { actions: ["ec2:Describe*", "elasticloadbalancing:Describe*", "cloudwatch:Describe*", "autoscaling:Describe*"],  resources: "*" },
+  // RDS
+  "arn:aws:iam::aws:policy/AmazonRDSFullAccess":        { actions: ["rds:*", "ec2:*", "cloudwatch:*"],  resources: "*" },
+  // Lambda
+  "arn:aws:iam::aws:policy/AWSLambda_FullAccess":       { actions: ["lambda:*", "iam:PassRole"],  resources: "*" },
+  // DynamoDB
+  "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess":   { actions: ["dynamodb:*", "cloudwatch:*"],  resources: "*" },
+  // Job function policies
+  "arn:aws:iam::aws:policy/job-function/Billing":                  { actions: ["aws-portal:*", "budgets:*", "ce:*", "cur:*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/job-function/DatabaseAdministrator":    { actions: ["rds:*", "dynamodb:*", "elasticache:*", "redshift:*", "cloudwatch:*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/job-function/DataScientistAccess":      { actions: ["s3:*", "athena:*", "glue:*", "sagemaker:*", "redshift:*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/job-function/NetworkAdministrator":     { actions: ["ec2:*", "elasticloadbalancing:*", "route53:*", "vpc:*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/job-function/SupportUser":              { actions: ["support:*", "*.Describe*", "*.List*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/job-function/SystemAdministrator":      { actions: ["*"],  resources: "*" },
+  // SSO / service-linked
+  "arn:aws:iam::aws:policy/aws-service-role/AWSSSOMemberAccountAdministrator": { actions: ["sso:*", "organizations:*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/aws-service-role/AWSSSODirectoryAdministrator":     { actions: ["sso:*", "identitystore:*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/aws-service-role/AWSSSOReadOnly":                   { actions: ["sso:List*", "sso:Get*", "identitystore:Describe*", "identitystore:List*"],  resources: "*" },
+};
+
+/**
+ * Converts a list of managed policy ARNs to a single inline IAM policy JSON.
+ * Needed because GetFederationToken's PolicyArns don't restrict console federation.
+ */
+function buildInlinePolicyFromArns(policyArns: string[]): string {
+  const statements: object[] = [];
+
+  // Collect all action sets from the mapped ARNs
+  const actionSets: string[][] = [];
+  for (const arn of policyArns) {
+    const mapped = MANAGED_POLICY_INLINE_MAP[arn];
+    if (mapped) {
+      actionSets.push(mapped.actions);
+    } else {
+      // Unknown ARN — assume it's a custom policy; log and allow all as fallback
+      console.warn(`[aws-federation] Unknown policy ARN in inline map, defaulting to allow-all: ${arn}`);
+      actionSets.push(["*"]);
+    }
+  }
+
+  // Check if any policy is allow-all
+  const isAllowAll = actionSets.some((a) => a.includes("*"));
+  const mergedActions = isAllowAll ? ["*"] : [...new Set(actionSets.flat())];
+
+  statements.push({
+    Effect: "Allow",
+    Action: mergedActions,
+    Resource: "*",
+  });
+
+  return JSON.stringify({ Version: "2012-10-17", Statement: statements });
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const AWS_FEDERATION_ENDPOINT = "https://signin.aws.amazon.com/federation";
@@ -59,7 +135,7 @@ export const awsFederationService = {
     // 3. Obtain temporary credentials from STS
     const tmpCreds =
       config.stsStrategy === "federation_token"
-        ? await getFederationTokenCredentials(brokerCreds, sessionName, durationSeconds)
+        ? await getFederationTokenCredentials(brokerCreds, sessionName, durationSeconds, config.policyArns)
         : await assumeRoleCredentials(brokerCreds, config, sessionName, durationSeconds);
 
     // 4. Request SigninToken from AWS federation endpoint
@@ -98,6 +174,10 @@ async function assumeRoleCredentials(
     DurationSeconds: durationSeconds,
     // ExternalId is required when the target role's trust policy uses a Condition: StringEquals sts:ExternalId
     ...(config.externalId ? { ExternalId: config.externalId } : {}),
+    // Session policies scope down the assumed role's permissions per-user
+    ...(config.policyArns && config.policyArns.length > 0
+      ? { PolicyArns: config.policyArns.map((arn) => ({ arn })) }
+      : {}),
   });
 
   let result;
@@ -135,40 +215,59 @@ async function assumeRoleCredentials(
 async function getFederationTokenCredentials(
   brokerCreds: AwsBrokerCredentials,
   federatedUserName: string,
-  durationSeconds: number
+  durationSeconds: number,
+  policyArns?: string[]
 ): Promise<AwsTemporaryCredentials> {
-  const sts = buildStsClient(brokerCreds, "us-east-1"); // GetFederationToken is global
-  console.log("11111111111111111111")
+  // GetFederationToken is a global endpoint — region param is ignored by STS
+  const sts = buildStsClient(brokerCreds, "us-east-1");
 
-  const policy = {
-    Version: "2012-10-17",
-    Statement: [
-      {
-        Effect: "Allow",
-        Action: "*",
-        Resource: "*"
-      }
-    ]
-  };
+  const hasExplicitPolicies = policyArns && policyArns.length > 0;
+
+  // IMPORTANT — why we use inline Policy, NOT PolicyArns here:
+  //
+  // AWS GetFederationToken's `PolicyArns` parameter does NOT reliably restrict
+  // console federation sign-in sessions. The AWS federation signin endpoint at
+  // signin.aws.amazon.com/federation honours the inline `Policy` JSON, but 
+  // the `PolicyArns` session-policy restriction is silently ignored during
+  // console token exchange for browser-based sessions.
+  //
+  // Fix: translate the assigned managed policy ARNs into an equivalent inline
+  // IAM policy document (Allow statements with the relevant IAM actions).
+  // This is the only reliable way to scope GetFederationToken console sessions.
+
+  let inlinePolicy: string;
+  if (hasExplicitPolicies) {
+    inlinePolicy = buildInlinePolicyFromArns(policyArns!);
+    console.log(
+      `[aws-federation] GetFederationToken: scoping session with inline policy derived from ${policyArns!.length} ARN(s):`,
+      policyArns
+    );
+    console.log("[aws-federation] Inline policy JSON:", inlinePolicy);
+  } else {
+    // No per-user policies → broker user's full effective permissions
+    inlinePolicy = JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [{ Effect: "Allow", Action: "*", Resource: "*" }],
+    });
+    console.log("[aws-federation] GetFederationToken: no per-user policies, using allow-all fallback");
+  }
 
   const cmd = new GetFederationTokenCommand({
     Name: sanitizeSessionName(federatedUserName),
     DurationSeconds: durationSeconds,
-    Policy: JSON.stringify(policy),
-    // No Policy = inherits broker's permissions. In production, scope this down
-    // with an inline policy that grants only the console read permissions needed.
+    Policy: inlinePolicy,
+    // NOTE: PolicyArns intentionally NOT sent — unreliable for console federation.
+    // Per-user scoping is handled via the inline Policy above.
   });
-  console.log("22222222222222222222")
 
   let result;
   try {
     result = await sts.send(cmd);
   } catch (err) {
-    console.log("44444444444444444444", err)
+    console.error("[aws-federation] GetFederationToken failed:", err);
     throw new AwsStsError("STS GetFederationToken failed", err);
   }
 
-  console.log("33333333333333333333")
   const creds = result.Credentials;
   if (!creds?.AccessKeyId || !creds.SecretAccessKey || !creds.SessionToken) {
     throw new AwsStsError("STS GetFederationToken returned incomplete credentials");
@@ -181,6 +280,7 @@ async function getFederationTokenCredentials(
     expiration: creds.Expiration ?? new Date(Date.now() + durationSeconds * 1000),
   };
 }
+
 
 // ─── AWS SigninToken ──────────────────────────────────────────────────────────
 

@@ -30,7 +30,14 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TableRow
+  TableRow,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Tooltip,
+  ListItemText,
+  Checkbox,
 } from "@mui/material";
 import { useApp } from "@/lib/app-context";
 import AdminResourcesList from "@/components/AdminResourcesList";
@@ -49,7 +56,10 @@ import {
   Globe,
   Server,
   Fingerprint,
-  Building2
+  Building2,
+  UserPlus,
+  Settings2,
+  X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -385,6 +395,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
     environment: initialData?.environment || "production",
     description: initialData?.description || "",
     organizationId: initialData?.organizationId || "",
+    availablePolicyArns: (initialData?.availablePolicyArns || []).join('\n'),
     accessKeyId: "",
     secretAccessKey: "",
   });
@@ -421,10 +432,17 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
     setLoading(true);
     try {
       const isEdit = !!initialData;
+      // Parse availablePolicyArns from string into array
+      const policyArnsArray = formData.availablePolicyArns
+        .split(/[\n,]+/)
+        .map((p: string) => p.trim())
+        .filter((p: string) => p.length > 0);
+
+      const payload = isEdit ? { id: initialData.id, ...formData, availablePolicyArns: policyArnsArray } : { ...formData, availablePolicyArns: policyArnsArray };
       const res = await fetch("/api/admin/aws/resources", {
         method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isEdit ? { id: initialData.id, ...formData } : formData),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Failed to ${isEdit ? "update" : "create"} AWS resource`);
@@ -467,6 +485,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
           environment: "production",
           description: "",
           organizationId: "",
+          availablePolicyArns: "",
           accessKeyId: "",
           secretAccessKey: "",
         });
@@ -637,6 +656,20 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
             value={formData.destination}
             onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
             sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+          />
+        </Grid>
+        <Grid size={12}>
+          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>AVAILABLE POLICY ARNS (One per line)</Typography>
+          <TextField
+            fullWidth
+            multiline
+            rows={4}
+            variant="outlined"
+            placeholder="arn:aws:iam::aws:policy/ReadOnlyAccess&#10;arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
+            value={formData.availablePolicyArns}
+            onChange={(e) => setFormData({ ...formData, availablePolicyArns: e.target.value })}
+            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+            helperText="Specify IAM managed policy ARNs that admins can assign to users for this resource."
           />
         </Grid>
 
@@ -879,7 +912,16 @@ function AssignAppForm({ onSuccess, onError }: AdminActionProps) {
   const [formData, setFormData] = useState({
     email: "",
     resourceKey: "",
+    policyArns: [] as string[],
   });
+  const [awsResources, setAwsResources] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch("/api/admin/aws/resources").then(r => r.json()).then(setAwsResources).catch(console.error);
+  }, []);
+
+  const matchedAwsResource = awsResources.find(r => r.resourceKey === formData.resourceKey);
+  const availablePolicies = matchedAwsResource?.availablePolicyArns || [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -888,12 +930,12 @@ function AssignAppForm({ onSuccess, onError }: AdminActionProps) {
       const res = await fetch("/api/admin/users/assign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, policyArns: formData.policyArns }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || data.message || "Failed to assign app");
       onSuccess(data.message || `Assigned key "${formData.resourceKey}" to "${data.email}" successfully.`);
-      setFormData({ email: "", resourceKey: "" });
+      setFormData({ email: "", resourceKey: "", policyArns: [] });
     } catch (err: any) {
       onError(err.message);
     } finally {
@@ -927,6 +969,37 @@ function AssignAppForm({ onSuccess, onError }: AdminActionProps) {
             sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
           />
         </Grid>
+        {matchedAwsResource && availablePolicies.length > 0 && (
+          <Grid size={12}>
+            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>AWS SESSION POLICIES (optional)</Typography>
+            <FormControl fullWidth variant="outlined">
+              <Select
+                multiple
+                displayEmpty
+                value={formData.policyArns}
+                onChange={(e) => setFormData({ ...formData, policyArns: typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value })}
+                renderValue={(selected: string[]) => {
+                  if (selected.length === 0) {
+                    return <em>Select policies to assign</em>;
+                  }
+                  return (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {selected.map((value) => (
+                        <Chip key={value} label={value} size="small" sx={{ fontWeight: 600, fontFamily: 'monospace' }} />
+                      ))}
+                    </Box>
+                  );
+                }}
+              >
+                {availablePolicies.map((arn: string) => (
+                  <MenuItem key={arn} value={arn} sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                    {arn}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+        )}
         <Grid size={12}>
           <Button
             fullWidth
@@ -1079,7 +1152,473 @@ function OrganizationsPanel({ onSuccess, onError }: AdminActionProps) {
   );
 }
 
+
+// ─── Users Panel ─────────────────────────────────────────────────────────────
+
+function PolicyChecklist({
+  availablePolicies,
+  selected,
+  onChange,
+}: {
+  availablePolicies: string[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Paper
+      variant="outlined"
+      sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 3, overflow: "hidden", maxHeight: 260, overflowY: "auto" }}
+    >
+      {availablePolicies.map((arn) => {
+        const checked = selected.includes(arn);
+        return (
+          <Box
+            key={arn}
+            onClick={() => onChange(checked ? selected.filter((a) => a !== arn) : [...selected, arn])}
+            sx={{
+              display: "flex", alignItems: "center", px: 2, py: 1.5, gap: 1.5, cursor: "pointer",
+              borderBottom: `1px solid ${theme.palette.divider}`,
+              bgcolor: checked ? alpha(theme.palette.warning.main, 0.05) : "transparent",
+              "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.04) },
+              "&:last-child": { borderBottom: "none" },
+              transition: "background-color 0.15s ease",
+            }}
+          >
+            <Checkbox checked={checked} size="small" color="warning" sx={{ p: 0 }} />
+            <Box flex={1} minWidth={0}>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: checked ? "warning.main" : "text.primary" }}>
+                {arn.split("/").pop()}
+              </Typography>
+              <Typography variant="caption" sx={{ color: "text.secondary", fontFamily: "monospace", fontSize: "0.65rem", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {arn}
+              </Typography>
+            </Box>
+          </Box>
+        );
+      })}
+    </Paper>
+  );
+}
+
+function UsersPanel({ onSuccess, onError }: AdminActionProps) {
+  const theme = useTheme();
+  const [users, setUsers] = useState<any[]>([]);
+  const [allResources, setAllResources] = useState<any[]>([]);
+  const [awsResources, setAwsResources] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Assign dialog
+  const [assignTarget, setAssignTarget] = useState<any | null>(null);
+  const [assignForm, setAssignForm] = useState({ resourceKey: "", policyArns: [] as string[] });
+  const [saving, setSaving] = useState(false);
+
+  // Manage dialog
+  const [manageTarget, setManageTarget] = useState<any | null>(null);
+  const [editingPolicies, setEditingPolicies] = useState<Record<string, string[]>>({});
+  const [managing, setManaging] = useState<string | null>(null); // resourceKey being acted on
+
+  const fetchAll = async () => {
+    setLoading(true);
+    try {
+      const [usersRes, webRes, awsRes] = await Promise.all([
+        fetch("/api/admin/users"),
+        fetch("/api/admin/apps"),
+        fetch("/api/admin/aws/resources"),
+      ]);
+      if (usersRes.ok) setUsers(await usersRes.json());
+      if (webRes.ok) setAllResources(await webRes.json());
+      if (awsRes.ok) setAwsResources(await awsRes.json());
+    } catch (err) {
+      console.error("Failed to load users/resources", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchAll(); }, []);
+
+  // ── Assign helpers ────────────────────────────────────────────────────────
+  const openAssign = (user: any) => {
+    setAssignTarget(user);
+    setAssignForm({ resourceKey: "", policyArns: [] });
+  };
+  const closeAssign = () => setAssignTarget(null);
+  const matchedAwsResource = awsResources.find((r) => r.resourceKey === assignForm.resourceKey);
+  const availablePolicies: string[] = matchedAwsResource?.availablePolicyArns || [];
+
+  const handleAssign = async () => {
+    if (!assignTarget || !assignForm.resourceKey) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/users/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: assignTarget.email,
+          resourceKey: assignForm.resourceKey,
+          ...(assignForm.policyArns.length > 0 ? { policyArns: assignForm.policyArns } : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to assign resource");
+      onSuccess(data.message || `Resource assigned to ${assignTarget.email}`);
+      closeAssign();
+      fetchAll();
+    } catch (err: any) {
+      onError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Manage helpers ────────────────────────────────────────────────────────
+  const openManage = (user: any) => {
+    // Pre-populate editingPolicies from existing awsPolicies
+    const init: Record<string, string[]> = {};
+    (user.awsPolicies || []).forEach((ap: any) => {
+      init[ap.awsResource?.resourceKey] = [...ap.policyArns];
+    });
+    setEditingPolicies(init);
+    setManageTarget(user);
+  };
+  const closeManage = () => { setManageTarget(null); setEditingPolicies({}); };
+
+  const handleRemoveResource = async (userEmail: string, resourceKey: string) => {
+    setManaging(resourceKey);
+    try {
+      const res = await fetch("/api/admin/users/assign", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: userEmail, resourceKey }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to remove resource");
+      onSuccess(data.message || "Access revoked");
+      // Refresh manage target
+      await fetchAll();
+      setManageTarget((prev: any) => prev ? {
+        ...prev,
+        allowedResourceKeys: prev.allowedResourceKeys.filter((k: string) => k !== resourceKey),
+        awsPolicies: (prev.awsPolicies || []).filter((ap: any) => ap.awsResource?.resourceKey !== resourceKey),
+      } : null);
+    } catch (err: any) {
+      onError(err.message);
+    } finally {
+      setManaging(null);
+    }
+  };
+
+  const handleUpdatePolicies = async (userEmail: string, resourceKey: string, policyArns: string[]) => {
+    setManaging(resourceKey);
+    try {
+      const res = await fetch("/api/admin/users/assign", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: userEmail, resourceKey, policyArns }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update policies");
+      onSuccess(data.message || "Policies updated");
+      fetchAll();
+    } catch (err: any) {
+      onError(err.message);
+    } finally {
+      setManaging(null);
+    }
+  };
+
+  const roleColor = (role: string) => {
+    if (role === "super_admin") return "error";
+    if (role === "admin") return "warning";
+    return "default";
+  };
+
+  return (
+    <Box>
+      {loading ? (
+        <Stack alignItems="center" py={8}>
+          <CircularProgress size={32} />
+          <Typography variant="caption" sx={{ mt: 2, color: "text.secondary" }}>Loading users…</Typography>
+        </Stack>
+      ) : (
+        <TableContainer component={Paper} elevation={0} sx={{ bgcolor: "transparent", border: `1px solid ${theme.palette.divider}`, borderRadius: 4, overflow: "hidden" }}>
+          <Table>
+            <TableHead sx={{ bgcolor: alpha(theme.palette.background.paper, 0.6) }}>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 800, color: "text.secondary", fontSize: "0.7rem", letterSpacing: "0.08em" }}>USER</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: "text.secondary", fontSize: "0.7rem", letterSpacing: "0.08em" }}>ROLE</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: "text.secondary", fontSize: "0.7rem", letterSpacing: "0.08em" }}>ORGANIZATIONS</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: "text.secondary", fontSize: "0.7rem", letterSpacing: "0.08em" }}>RESOURCES</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: "text.secondary", fontSize: "0.7rem", letterSpacing: "0.08em" }}>AWS POLICIES</TableCell>
+                <TableCell sx={{ fontWeight: 800, color: "text.secondary", fontSize: "0.7rem", letterSpacing: "0.08em" }} align="right">ACTIONS</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {users.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
+                    <Typography variant="caption" sx={{ color: "text.secondary", fontStyle: "italic" }}>No users found.</Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                users.map((user) => (
+                  <TableRow key={user.id} sx={{ "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.03) } }}>
+                    <TableCell sx={{ py: 2 }}>
+                      <Stack spacing={0.5}>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{user.name}</Typography>
+                        <Typography variant="caption" sx={{ color: "text.secondary", fontFamily: "monospace" }}>{user.email}</Typography>
+                      </Stack>
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }}>
+                      <Chip label={user.role} size="small" color={roleColor(user.role) as any} variant="outlined"
+                        sx={{ fontWeight: 700, fontSize: "0.65rem", textTransform: "uppercase" }} />
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }}>
+                      <Stack direction="row" flexWrap="wrap" gap={0.5}>
+                        {user.organizations?.length > 0 ? (
+                          user.organizations.map((o: any) => (
+                            <Chip key={o.id} icon={<Building2 size={10} />} label={o.organization?.name || "—"} size="small"
+                              sx={{ fontSize: "0.65rem", fontWeight: 600, bgcolor: alpha(theme.palette.primary.main, 0.08), color: "primary.light" }} />
+                          ))
+                        ) : <Typography variant="caption" sx={{ color: "text.secondary", fontStyle: "italic" }}>None</Typography>}
+                      </Stack>
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }}>
+                      <Stack direction="row" flexWrap="wrap" gap={0.5} maxWidth={200}>
+                        {user.allowedResourceKeys?.length > 0 ? (
+                          user.allowedResourceKeys.map((k: string) => (
+                            <Chip key={k} label={k} size="small"
+                              sx={{ fontFamily: "monospace", fontSize: "0.6rem", fontWeight: 700, bgcolor: alpha(theme.palette.success.main, 0.08), color: "success.light" }} />
+                          ))
+                        ) : <Typography variant="caption" sx={{ color: "text.secondary", fontStyle: "italic" }}>None</Typography>}
+                      </Stack>
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }}>
+                      {user.awsPolicies?.length > 0 ? (
+                        <Stack spacing={0.5}>
+                          {user.awsPolicies.map((ap: any) => (
+                            <Box key={ap.id}>
+                              <Typography variant="caption" sx={{ fontWeight: 700, color: "warning.main", fontSize: "0.65rem" }}>{ap.awsResource?.name}</Typography>
+                              <Stack direction="row" flexWrap="wrap" gap={0.5} mt={0.5}>
+                                {ap.policyArns.map((arn: string) => (
+                                  <Tooltip key={arn} title={arn} placement="top">
+                                    <Chip label={arn.split("/").pop()} size="small"
+                                      sx={{ fontFamily: "monospace", fontSize: "0.55rem", maxWidth: 140, bgcolor: alpha(theme.palette.warning.main, 0.08), color: "warning.light" }} />
+                                  </Tooltip>
+                                ))}
+                              </Stack>
+                            </Box>
+                          ))}
+                        </Stack>
+                      ) : <Typography variant="caption" sx={{ color: "text.secondary", fontStyle: "italic" }}>None</Typography>}
+                    </TableCell>
+                    <TableCell sx={{ py: 2 }} align="right">
+                      <Stack direction="row" spacing={1} justifyContent="flex-end">
+                        <Tooltip title="Assign Resource">
+                          <IconButton size="small" onClick={() => openAssign(user)}
+                            sx={{ bgcolor: alpha(theme.palette.primary.main, 0.1), color: "primary.main", "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.2) } }}>
+                            <UserPlus size={14} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Manage Access">
+                          <IconButton size="small" onClick={() => openManage(user)}
+                            sx={{ bgcolor: alpha(theme.palette.warning.main, 0.1), color: "warning.main", "&:hover": { bgcolor: alpha(theme.palette.warning.main, 0.2) } }}>
+                            <Settings2 size={14} />
+                          </IconButton>
+                        </Tooltip>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      {/* ── Assign Resource Dialog ── */}
+      <Dialog open={!!assignTarget} onClose={closeAssign} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { borderRadius: 5, bgcolor: theme.palette.background.paper, backgroundImage: "none", border: `1px solid ${theme.palette.divider}` } }}>
+        <DialogTitle sx={{ fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <UserPlus size={20} color={theme.palette.primary.main} />
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Assign Resource</Typography>
+              <Typography variant="caption" sx={{ color: "text.secondary", fontFamily: "monospace" }}>{assignTarget?.email}</Typography>
+            </Box>
+          </Stack>
+          <IconButton size="small" onClick={closeAssign}><X size={16} /></IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Stack spacing={3}>
+            <Box>
+              <Typography variant="caption" sx={{ mb: 1, display: "block", fontWeight: 800, color: "text.secondary", letterSpacing: "0.08em" }}>SELECT RESOURCE</Typography>
+              <FormControl fullWidth variant="outlined">
+                <Select displayEmpty value={assignForm.resourceKey}
+                  onChange={(e) => setAssignForm({ resourceKey: e.target.value, policyArns: [] })}>
+                  <MenuItem value="" disabled><em>Choose a resource…</em></MenuItem>
+                  {allResources.length > 0 && <MenuItem disabled sx={{ fontSize: "0.65rem", fontWeight: 800, color: "text.secondary" }}>— WEB RESOURCES —</MenuItem>}
+                  {allResources.map((r: any) => (
+                    <MenuItem key={r.resourceKey} value={r.resourceKey}>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Globe size={14} />
+                        <ListItemText primary={r.name} secondary={r.resourceKey}
+                          primaryTypographyProps={{ variant: "body2", fontWeight: 700 }}
+                          secondaryTypographyProps={{ variant: "caption", fontFamily: "monospace" }} />
+                      </Stack>
+                    </MenuItem>
+                  ))}
+                  {awsResources.length > 0 && <MenuItem disabled sx={{ fontSize: "0.65rem", fontWeight: 800, color: "text.secondary" }}>— AWS RESOURCES —</MenuItem>}
+                  {awsResources.map((r: any) => (
+                    <MenuItem key={r.resourceKey} value={r.resourceKey}>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Server size={14} />
+                        <ListItemText primary={r.name} secondary={`${r.resourceKey} · ${r.awsAccountId}`}
+                          primaryTypographyProps={{ variant: "body2", fontWeight: 700 }}
+                          secondaryTypographyProps={{ variant: "caption", fontFamily: "monospace" }} />
+                      </Stack>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+            {assignTarget?.allowedResourceKeys?.includes(assignForm.resourceKey) && (
+              <Alert severity="info" variant="outlined" sx={{ borderRadius: 3 }}>
+                User already has access. You can still update policies below.
+              </Alert>
+            )}
+            {matchedAwsResource && availablePolicies.length > 0 && (
+              <Box>
+                <Typography variant="caption" sx={{ mb: 1, display: "block", fontWeight: 800, color: "text.secondary", letterSpacing: "0.08em" }}>
+                  SESSION POLICIES
+                  <Typography component="span" variant="caption" sx={{ fontWeight: 400, ml: 1, color: "text.secondary" }}>(scope this user's AWS session)</Typography>
+                </Typography>
+                <PolicyChecklist availablePolicies={availablePolicies} selected={assignForm.policyArns}
+                  onChange={(next) => setAssignForm((p) => ({ ...p, policyArns: next }))} />
+                {assignForm.policyArns.length > 0 && (
+                  <Stack direction="row" flexWrap="wrap" gap={0.5} mt={1.5}>
+                    {assignForm.policyArns.map((arn) => (
+                      <Chip key={arn} label={arn.split("/").pop()} size="small" color="warning" variant="outlined"
+                        onDelete={() => setAssignForm((p) => ({ ...p, policyArns: p.policyArns.filter((a) => a !== arn) }))}
+                        sx={{ fontFamily: "monospace", fontSize: "0.65rem", fontWeight: 700 }} />
+                    ))}
+                  </Stack>
+                )}
+              </Box>
+            )}
+            {matchedAwsResource && availablePolicies.length === 0 && (
+              <Alert severity="warning" variant="outlined" sx={{ borderRadius: 3 }}>
+                This AWS resource has no available policies configured. Edit the resource to add policy ARNs.
+              </Alert>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+          <Button onClick={closeAssign} variant="outlined" sx={{ borderRadius: 3, fontWeight: 700 }}>Cancel</Button>
+          <Button onClick={handleAssign} variant="contained" disabled={saving || !assignForm.resourceKey}
+            startIcon={saving ? <CircularProgress size={16} /> : <UserPlus size={16} />}
+            sx={{ borderRadius: 3, fontWeight: 800 }}>
+            {saving ? "Assigning…" : "Assign Resource"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Manage Access Dialog ── */}
+      <Dialog open={!!manageTarget} onClose={closeManage} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { borderRadius: 5, bgcolor: theme.palette.background.paper, backgroundImage: "none", border: `1px solid ${theme.palette.divider}` } }}>
+        <DialogTitle sx={{ fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <Settings2 size={20} color={theme.palette.warning.main} />
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Manage Access</Typography>
+              <Typography variant="caption" sx={{ color: "text.secondary", fontFamily: "monospace" }}>{manageTarget?.email}</Typography>
+            </Box>
+          </Stack>
+          <IconButton size="small" onClick={closeManage}><X size={16} /></IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          {manageTarget?.allowedResourceKeys?.length === 0 ? (
+            <Typography variant="body2" sx={{ color: "text.secondary", fontStyle: "italic", py: 4, textAlign: "center" }}>
+              No resources assigned yet.
+            </Typography>
+          ) : (
+            <Stack spacing={2} mt={1}>
+              {(manageTarget?.allowedResourceKeys || []).map((rk: string) => {
+                const awsRes = awsResources.find((r: any) => r.resourceKey === rk);
+                const existingPolicies: string[] = editingPolicies[rk] ?? [];
+                const availForThis: string[] = awsRes?.availablePolicyArns || [];
+                const isActing = managing === rk;
+
+                return (
+                  <Paper key={rk} variant="outlined" sx={{ p: 2.5, borderRadius: 3, border: `1px solid ${theme.palette.divider}` }}>
+                    <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={2}>
+                      <Box flex={1} minWidth={0}>
+                        <Stack direction="row" spacing={1} alignItems="center" mb={0.5}>
+                          {awsRes ? <Server size={14} color={theme.palette.warning.main} /> : <Globe size={14} color={theme.palette.primary.main} />}
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{awsRes?.name || rk}</Typography>
+                          <Chip label={awsRes ? "AWS" : "Web"} size="small" color={awsRes ? "warning" : "primary"} variant="outlined"
+                            sx={{ fontSize: "0.55rem", fontWeight: 800, height: 18 }} />
+                        </Stack>
+                        <Typography variant="caption" sx={{ fontFamily: "monospace", color: "text.secondary" }}>{rk}</Typography>
+
+                        {/* Policy editor for AWS resources */}
+                        {awsRes && availForThis.length > 0 && (
+                          <Box mt={2}>
+                            <Typography variant="caption" sx={{ fontWeight: 800, color: "text.secondary", letterSpacing: "0.08em", display: "block", mb: 1 }}>
+                              SESSION POLICIES
+                            </Typography>
+                            <PolicyChecklist availablePolicies={availForThis} selected={existingPolicies}
+                              onChange={(next) => setEditingPolicies((p) => ({ ...p, [rk]: next }))} />
+                            {existingPolicies.length > 0 && (
+                              <Stack direction="row" flexWrap="wrap" gap={0.5} mt={1}>
+                                {existingPolicies.map((arn) => (
+                                  <Chip key={arn} label={arn.split("/").pop()} size="small" color="warning" variant="outlined"
+                                    onDelete={() => setEditingPolicies((p) => ({ ...p, [rk]: p[rk].filter((a) => a !== arn) }))}
+                                    sx={{ fontFamily: "monospace", fontSize: "0.6rem", fontWeight: 700 }} />
+                                ))}
+                              </Stack>
+                            )}
+                            <Button size="small" variant="contained" color="warning" disabled={isActing}
+                              startIcon={isActing ? <CircularProgress size={12} /> : <ShieldCheck size={13} />}
+                              onClick={() => handleUpdatePolicies(manageTarget.email, rk, existingPolicies)}
+                              sx={{ mt: 1.5, fontWeight: 800, borderRadius: 2, fontSize: "0.7rem" }}>
+                              {isActing ? "Saving…" : "Save Policies"}
+                            </Button>
+                          </Box>
+                        )}
+                        {awsRes && availForThis.length === 0 && (
+                          <Typography variant="caption" sx={{ color: "text.secondary", fontStyle: "italic", display: "block", mt: 1 }}>
+                            No policies configured for this resource.
+                          </Typography>
+                        )}
+                      </Box>
+
+                      {/* Remove button */}
+                      <Tooltip title="Revoke Access">
+                        <IconButton size="small" disabled={isActing}
+                          onClick={() => handleRemoveResource(manageTarget.email, rk)}
+                          sx={{ bgcolor: alpha(theme.palette.error.main, 0.08), color: "error.main", "&:hover": { bgcolor: alpha(theme.palette.error.main, 0.18) }, flexShrink: 0 }}>
+                          {isActing ? <CircularProgress size={14} color="error" /> : <Trash2 size={14} />}
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                  </Paper>
+                );
+              })}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button onClick={closeManage} variant="outlined" sx={{ borderRadius: 3, fontWeight: 700 }}>Done</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
 export default function AdminPanel() {
+
   const [activeTab, setActiveTab] = useState(0);
   const [appTypeToggle, setAppTypeToggle] = useState<"web" | "aws">("web");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -1234,20 +1773,21 @@ export default function AdminPanel() {
         {activeTab === 2 && (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}>
             <Stack spacing={8}>
+              {/* ── All Users Table ── */}
+              <Box>
+                <Typography variant="caption" sx={{ mb: 6, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'primary.main', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase' }}>
+                  <Users size={16} /> All Users
+                </Typography>
+                <UsersPanel onSuccess={handleSuccess} onError={handleError} />
+              </Box>
+
+              {/* ── Create new user ── */}
               <Box>
                 <Typography variant="caption" sx={{ mb: 6, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'success.main', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase' }}>
                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
                   Provision Active Identity
                 </Typography>
                 <CreateUserForm onSuccess={handleSuccess} onError={handleError} />
-              </Box>
-              
-              <Box>
-                <Typography variant="caption" sx={{ mb: 6, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'violet.main', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase' }}>
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'violet.main' }} />
-                  Modify Access Policy
-                </Typography>
-                <AssignAppForm onSuccess={handleSuccess} onError={handleError} />
               </Box>
             </Stack>
           </motion.div>

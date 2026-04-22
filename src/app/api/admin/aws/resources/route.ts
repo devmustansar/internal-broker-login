@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
       stsStrategy: body.stsStrategy ?? "assume_role",
       environment: body.environment ?? "production",
       organizationId: body.organizationId || null,
+      availablePolicyArns: Array.isArray(body.availablePolicyArns) ? body.availablePolicyArns : [],
     });
 
     return NextResponse.json(resource, { status: 201 });
@@ -126,19 +127,28 @@ export async function PUT(req: NextRequest) {
       data: {
         resourceKey: data.resourceKey,
         name: data.name,
-        description: data.description,
+        description: data.description || null,
         awsAccountId: data.awsAccountId,
         roleArn: data.roleArn,
         region: data.region,
         destination: data.destination,
         issuer: data.issuer,
         sessionDurationSeconds: Number(data.sessionDurationSeconds),
-        externalId: data.externalId,
+        externalId: data.externalId || null,
         brokerCredentialRef: data.brokerCredentialRef,
         stsStrategy: data.stsStrategy,
-        isActive: data.isActive,
+        ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
         environment: data.environment,
-        organizationId: data.organizationId ?? existing.organizationId,
+        ...(data.organizationId || existing.organizationId
+          ? {
+              organization: data.organizationId
+                ? { connect: { id: data.organizationId } }
+                : { connect: { id: existing.organizationId! } }
+            }
+          : {
+              organization: { disconnect: true }
+            }),
+        ...(Array.isArray(data.availablePolicyArns) ? { availablePolicyArns: data.availablePolicyArns } : {}),
       },
     });
 

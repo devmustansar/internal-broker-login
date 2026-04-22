@@ -176,6 +176,12 @@ export interface AwsResourceConfig {
    * "federation_token" — fallback; uses broker credentials directly (less secure).
    */
   stsStrategy: "assume_role" | "federation_token";
+  /**
+   * IAM managed policy ARNs to attach as session policies.
+   * These scope down the assumed role's permissions for this specific session.
+   * Populated per-user from the UserAwsPolicy table at launch time.
+   */
+  policyArns?: string[];
 }
 
 /**
