@@ -81,6 +81,8 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
     loginAdapter: initialData?.loginAdapter || "json_login",
     tokenExtractionPath: initialData?.tokenExtractionPath || "",
     tokenValidationPath: initialData?.tokenValidationPath || "",
+    magicLinkExtractionPath: (initialData as any)?.magicLinkExtractionPath || "",
+    loginPayloadTemplate: (initialData as any)?.loginPayloadTemplate || "",
     usernameField: initialData?.usernameField || "",
     passwordField: initialData?.passwordField || "",
     environment: initialData?.environment || "production",
@@ -163,6 +165,8 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
           loginAdapter: "json_login",
           tokenExtractionPath: "",
           tokenValidationPath: "",
+          magicLinkExtractionPath: "",
+          loginPayloadTemplate: "",
           usernameField: "",
           passwordField: "",
           environment: "production",
@@ -256,6 +260,7 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
               <MenuItem value="json_login">JSON API Request</MenuItem>
               <MenuItem value="form_login_basic">Legacy Basic Form</MenuItem>
               <MenuItem value="form_login_csrf">Form with CSRF Mitigation</MenuItem>
+              <MenuItem value="magic_link">Magic Link (direct redirect)</MenuItem>
             </Select>
           </FormControl>
         </Grid>
@@ -268,6 +273,7 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
             placeholder="e.g. email or username"
             value={formData.usernameField}
             onChange={(e) => setFormData({ ...formData, usernameField: e.target.value })}
+            helperText={formData.loginPayloadTemplate ? "Overridden by payload template below" : undefined}
             sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
           />
         </Grid>
@@ -279,10 +285,43 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
             placeholder="e.g. password"
             value={formData.passwordField}
             onChange={(e) => setFormData({ ...formData, passwordField: e.target.value })}
+            helperText={formData.loginPayloadTemplate ? "Overridden by payload template below" : undefined}
             sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
           />
         </Grid>
-        
+
+        {/* Login Payload Template — shown for json_login and magic_link */}
+        {(formData.loginAdapter === "json_login" || formData.loginAdapter === "magic_link") && (
+          <Grid size={12}>
+            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>LOGIN PAYLOAD TEMPLATE</Typography>
+            <TextField
+              fullWidth
+              multiline
+              minRows={4}
+              maxRows={12}
+              variant="outlined"
+              placeholder={JSON.stringify({
+                user_params: {
+                  email: "{{email}}",
+                  password: "{{password}}",
+                  external_login_url: true
+                }
+              }, null, 2)}
+              value={formData.loginPayloadTemplate}
+              onChange={(e) => setFormData({ ...formData, loginPayloadTemplate: e.target.value })}
+              helperText={
+                formData.loginPayloadTemplate
+                  ? (() => { try { JSON.parse(formData.loginPayloadTemplate); return "✓ Valid JSON"; } catch { return "⚠ Invalid JSON — fix before saving"; } })()
+                  : "Optional. Leave blank to send a flat {email, password} body. Use {{email}} and {{password}} as placeholders anywhere in the JSON."
+              }
+              error={!!formData.loginPayloadTemplate && (() => { try { JSON.parse(formData.loginPayloadTemplate); return false; } catch { return true; } })()}
+              sx={{
+                '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: '0.8rem' },
+              }}
+            />
+          </Grid>
+        )}
+
         <Grid size={{ xs: 12, md: 6 }}>
           <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>TOKEN EXTRACTION PATH</Typography>
           <TextField
@@ -292,6 +331,7 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
             value={formData.tokenExtractionPath}
             onChange={(e) => setFormData({ ...formData, tokenExtractionPath: e.target.value })}
             disabled={formData.loginAdapter !== "json_login"}
+            helperText={formData.loginAdapter === "magic_link" ? "Not used for magic_link adapter" : undefined}
             sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
           />
         </Grid>
@@ -303,9 +343,27 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
             placeholder="e.g. /auth/validate"
             value={formData.tokenValidationPath}
             onChange={(e) => setFormData({ ...formData, tokenValidationPath: e.target.value })}
+            disabled={formData.loginAdapter === "magic_link"}
+            helperText={formData.loginAdapter === "magic_link" ? "Not used for magic_link adapter" : undefined}
             sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
           />
         </Grid>
+
+        {/* Magic Link extraction path — only shown when magic_link adapter is selected */}
+        {formData.loginAdapter === "magic_link" && (
+          <Grid size={12}>
+            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>MAGIC LINK URL PATH</Typography>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder='e.g. data.url  or  link  or  redirectUrl'
+              value={formData.magicLinkExtractionPath}
+              onChange={(e) => setFormData({ ...formData, magicLinkExtractionPath: e.target.value })}
+              helperText="JSON dot-path to the redirect URL in the login response (leave blank to auto-detect common field names)."
+              sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+            />
+          </Grid>
+        )}
 
         {/* Managed Credentials Section */}
         <Grid size={12}>

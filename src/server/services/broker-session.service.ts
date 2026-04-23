@@ -94,10 +94,12 @@ export const brokerSessionService = {
     //    The client backend validates the credentials and returns a one-time token.
     //    The broker extracts the token via tokenExtractionPath (e.g. "data.token") or
     //    common fallback paths (token / access_token / info.token …).
-    console.log(`[BrokerSession] Requesting one-time token from '${resource.loginUrl}'`);
+    console.log(`[BrokerSession] Requesting login from '${resource.loginUrl}' via adapter '${resource.loginAdapter}'`);
     const adapter = getLoginAdapter(resource.loginAdapter);
     const loginResult = await adapter.login(resource.loginUrl, credential, {
       tokenExtractionPath: resource.tokenExtractionPath,
+      magicLinkExtractionPath: resource.magicLinkExtractionPath,
+      loginPayloadTemplate: resource.loginPayloadTemplate,
       usernameField: resource.usernameField,
       passwordField: resource.passwordField,
     });
@@ -120,7 +122,57 @@ export const brokerSessionService = {
       );
     }
 
-    // Extract the one-time token from the login result
+    // ── Magic Link flow ──────────────────────────────────────────────────────
+    // When the target app returns a redirect URL directly (magic_link adapter),
+    // skip the one-time-token handshake and redirect the user straight to it.
+    if (loginResult.redirectUrl) {
+      auditLogService.log({
+        action: "redirect_url_issued",
+        internalUserId,
+        resourceKey,
+        outcome: "success",
+        details: { flow: "magic_link", appHost: resource.appHost },
+      });
+
+      const brokerSessionId = uuidv4();
+      const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString();
+      const session: BrokerSession = {
+        brokerSessionId,
+        internalUserId,
+        resourceKey,
+        managedAccountKey: managedAccount.accountKey,
+        upstreamCookies: {},
+        expiresAt,
+        createdAt: new Date().toISOString(),
+        status: "active",
+        appHost: resource.appHost,
+        apiHost: resource.apiHost,
+        metadata: { flow: "magic_link", loginAdapter: resource.loginAdapter },
+      };
+      await repo.create(session);
+
+      auditLogService.log({
+        action: "broker_session_created",
+        internalUserId,
+        resourceKey,
+        brokerSessionId,
+        outcome: "success",
+        details: { expiresAt, flow: "magic_link" },
+      });
+
+      return {
+        brokerSessionId,
+        resourceKey,
+        appHost: resource.appHost,
+        apiHost: resource.apiHost,
+        expiresAt,
+        status: "active",
+        redirectUrl: loginResult.redirectUrl,
+      };
+    }
+
+    // ── One-time token flow (standard) ───────────────────────────────────────
+    // Extract the one-time token from the login result.
     // The adapter stores it under the "token" key in upstreamCookies for json_login,
     // or it may be in metadata.oneTimeToken for future adapters.
     const oneTimeToken: string | undefined =

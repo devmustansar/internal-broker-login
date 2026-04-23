@@ -30,6 +30,60 @@ function parseCookies(headers: Headers): Record<string, string> {
   return cookies;
 }
 
+// ─── Helper: build login request payload ─────────────────────────────────────
+//
+// Supports two modes:
+//   1. Template mode   — admin provides a JSON template string with {{email}} /
+//                        {{password}} / {{username}} placeholders anywhere in the
+//                        tree.  Extra static fields are preserved verbatim.
+//                        e.g.: {"user_params":{"email":"{{email}}","password":"{{password}}","external_login_url":true}}
+//   2. Flat mode       — no template; produces { [usernameKey]: email, [passwordKey]: password }
+//
+// The replacement is done by deep-walking the parsed object so nested strings,
+// array elements, and scalar values all get substituted.
+
+function replacePlaceholders(node: unknown, email: string, password: string): unknown {
+  if (typeof node === "string") {
+    return node
+      .replace(/\{\{email\}\}/g, email)
+      .replace(/\{\{username\}\}/g, email)   // alias
+      .replace(/\{\{password\}\}/g, password);
+  }
+  if (Array.isArray(node)) {
+    return node.map((item) => replacePlaceholders(item, email, password));
+  }
+  if (node !== null && typeof node === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      result[k] = replacePlaceholders(v, email, password);
+    }
+    return result;
+  }
+  // booleans, numbers, null — keep as-is
+  return node;
+}
+
+function buildLoginPayload(
+  email: string,
+  password: string,
+  usernameKey: string,
+  passwordKey: string,
+  template?: string | null
+): unknown {
+  if (template) {
+    try {
+      const parsed = JSON.parse(template);
+      const filled = replacePlaceholders(parsed, email, password);
+      console.log(`[buildLoginPayload] Using template (placeholders resolved)`);
+      return filled;
+    } catch {
+      console.error(`[buildLoginPayload] loginPayloadTemplate is not valid JSON — falling back to flat payload`);
+    }
+  }
+  // Flat fallback
+  return { [usernameKey]: email, [passwordKey]: password };
+}
+
 // ─── Adapter: form_login_basic ────────────────────────────────────────────────
 // Standard HTML form POST with username/password fields
 
@@ -172,14 +226,18 @@ class JsonLoginAdapter implements ILoginAdapter {
     options?: Record<string, unknown>
   ): Promise<AdapterLoginResult> {
     try {
-      const usernameKey = (options?.usernameField as string) || "email"; // Since json APIs often use email
+      const usernameKey = (options?.usernameField as string) || "email";
       const passwordKey = (options?.passwordField as string) || "password";
+      const template = options?.loginPayloadTemplate as string | null | undefined;
 
       console.log(`[JsonLoginAdapter] Attempting POST to ${loginUrl}`);
-      const payload: Record<string, string> = {
-        [usernameKey]: credential.email,
-        [passwordKey]: credential.password,
-      };
+      const payload = buildLoginPayload(
+        credential.email,
+        credential.password,
+        usernameKey,
+        passwordKey,
+        template
+      );
 
       console.log(`[JsonLoginAdapter] Payload:`, payload);
       const res = await fetch(loginUrl, {
@@ -244,6 +302,129 @@ class JsonLoginAdapter implements ILoginAdapter {
   }
 }
 
+// ─── Adapter: magic_link ──────────────────────────────────────────────────────
+// The target app responds to the credentials POST with a magic link (redirect URL)
+// embedded in the JSON body. The broker extracts that URL and returns it as
+// redirectUrl — the browser is sent directly there, no token handshake needed.
+
+class MagicLinkAdapter implements ILoginAdapter {
+  async login(
+    loginUrl: string,
+    credential: VaultCredential,
+    options?: Record<string, unknown>
+  ): Promise<AdapterLoginResult> {
+    try {
+      const usernameKey = (options?.usernameField as string) || "email";
+      const passwordKey = (options?.passwordField as string) || "password";
+      const extractionPath = options?.magicLinkExtractionPath as string | undefined;
+      const template = options?.loginPayloadTemplate as string | null | undefined;
+
+      console.log(`[MagicLinkAdapter] Attempting POST to ${loginUrl}`);
+      const payload = buildLoginPayload(
+        credential.email,
+        credential.password,
+        usernameKey,
+        passwordKey,
+        template
+      );
+
+      const res = await fetch(loginUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        redirect: "manual",
+      });
+
+      console.log(`[MagicLinkAdapter] Response status: ${res.status}`);
+
+      const success = res.status >= 200 && res.status < 400;
+      if (!success) {
+        return {
+          success: false,
+          upstreamCookies: {},
+          statusCode: res.status,
+          errorMessage: `Magic link login returned HTTP ${res.status}`,
+        };
+      }
+
+      // Parse JSON body and extract the redirect URL
+      let redirectUrl: string | undefined;
+      try {
+        const text = await res.text();
+        console.log(`[MagicLinkAdapter] Raw response body:`, text);
+        const json = JSON.parse(text);
+
+        if (extractionPath) {
+          // Dot-path traversal: e.g. "data.url" → json.data.url
+          redirectUrl = extractionPath
+            .split(".")
+            .reduce((acc: any, key: string) => acc?.[key], json);
+          console.log(`[MagicLinkAdapter] Extracted URL via path '${extractionPath}':`, redirectUrl);
+        } else {
+          // Common fallback field names used by various apps
+          redirectUrl =
+            json?.redirectUrl ??
+            json?.redirect_url ??
+            json?.magicLink ??
+            json?.magic_link ??
+            json?.link ??
+            json?.url ??
+            json?.data?.url ??
+            json?.data?.link ??
+            json?.data?.redirectUrl;
+          console.log(`[MagicLinkAdapter] Extracted URL via fallback heuristic:`, redirectUrl);
+        }
+      } catch {
+        console.error(`[MagicLinkAdapter] Failed to parse JSON response from ${loginUrl}`);
+        return {
+          success: false,
+          upstreamCookies: {},
+          statusCode: res.status,
+          errorMessage: "Magic link login response was not valid JSON",
+        };
+      }
+
+      if (!redirectUrl || typeof redirectUrl !== "string") {
+        console.error(
+          `[MagicLinkAdapter] Magic link URL not found in response from ${loginUrl}. ` +
+          `Set magicLinkExtractionPath to the JSON path of the URL field (e.g. "data.url").`
+        );
+        return {
+          success: false,
+          upstreamCookies: {},
+          statusCode: res.status,
+          errorMessage:
+            `Magic link URL not found in login response. ` +
+            `Configure magicLinkExtractionPath (e.g. "data.url") to point to the URL field.`,
+        };
+      }
+
+      // Safety: only allow http/https schemes
+      if (!redirectUrl.startsWith("http://") && !redirectUrl.startsWith("https://")) {
+        return {
+          success: false,
+          upstreamCookies: {},
+          errorMessage: `Magic link URL has an unsupported scheme: ${redirectUrl.slice(0, 50)}`,
+        };
+      }
+
+      return {
+        success: true,
+        upstreamCookies: {},
+        statusCode: res.status,
+        redirectUrl,
+        metadata: { flow: "magic_link", extractionPath: extractionPath ?? "heuristic" },
+      };
+    } catch (err) {
+      return {
+        success: false,
+        upstreamCookies: {},
+        errorMessage: err instanceof Error ? err.message : "Unknown error",
+      };
+    }
+  }
+}
+
 // ─── Mock adapter for POC (safe to use when real target not available) ────────
 
 class MockLoginAdapter implements ILoginAdapter {
@@ -285,7 +466,7 @@ class MockLoginAdapter implements ILoginAdapter {
 const USE_MOCK_ADAPTERS = process.env.USE_MOCK_LOGIN_ADAPTERS === "true";
 
 export function getLoginAdapter(
-  adapterType: "form_login_basic" | "form_login_csrf" | "json_login"
+  adapterType: "form_login_basic" | "form_login_csrf" | "json_login" | "magic_link"
 ): ILoginAdapter {
   if (USE_MOCK_ADAPTERS) {
     return new MockLoginAdapter(adapterType);
@@ -298,6 +479,8 @@ export function getLoginAdapter(
       return new FormLoginCsrfAdapter();
     case "json_login":
       return new JsonLoginAdapter();
+    case "magic_link":
+      return new MagicLinkAdapter();
     default:
       throw new Error(`Unknown login adapter: ${adapterType}`);
   }

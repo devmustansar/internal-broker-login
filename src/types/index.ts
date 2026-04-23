@@ -22,11 +22,25 @@ export interface Resource {
   name: string;
   appHost: string; // e.g. "https://app.client.com"
   apiHost: string; // e.g. "https://api.client.com"
-  loginUrl: string; // e.g. "https://api.client.com/auth/broker-login" — client backend endpoint that validates credentials and returns a one-time token
+  loginUrl: string; // e.g. "https://api.client.com/auth/broker-login"
   loginMethod: "POST" | "GET";
-  loginAdapter: "form_login_basic" | "form_login_csrf" | "json_login";
-  tokenExtractionPath?: string | null; // JSON path to extract the one-time token from the login response
-  tokenValidationPath?: string | null; // e.g. "/auth/validate" — client app path that accepts ?token=<one-time-token>
+  loginAdapter: "form_login_basic" | "form_login_csrf" | "json_login" | "magic_link";
+  tokenExtractionPath?: string | null;
+  tokenValidationPath?: string | null;
+  /**
+   * For magic_link adapter: JSON dot-path to the redirect URL in the login response.
+   * e.g. "data.url", "link", "redirectTo".
+   * The broker will redirect the user directly to this URL, bypassing tokenValidationPath.
+   */
+  magicLinkExtractionPath?: string | null;
+  /**
+   * Optional JSON template for the login request body.
+   * Supports {{email}} and {{password}} placeholders — replaced at runtime with vault credentials.
+   * Any extra static fields and nesting in the template are preserved.
+   * Example: {"user_params":{"email":"{{email}}","password":"{{password}}","external_login_url":true}}
+   * When null/undefined, the broker falls back to a flat { [usernameField]: email, [passwordField]: password } body.
+   */
+  loginPayloadTemplate?: string | null;
   usernameField?: string | null;
   passwordField?: string | null;
   environment: "production" | "staging" | "development";
@@ -96,6 +110,8 @@ export interface AdapterLoginResult {
   statusCode?: number;
   errorMessage?: string;
   metadata?: Record<string, unknown>;
+  /** For magic_link adapters: the full redirect URL extracted from the login response. */
+  redirectUrl?: string;
 }
 
 // ─── API Payloads ─────────────────────────────────────────────────────────────

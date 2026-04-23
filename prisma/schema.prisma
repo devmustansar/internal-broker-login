@@ -31,9 +31,19 @@ model Resource {
   apiHost        String
   loginUrl       String
   loginMethod    String   @default("POST")
-  loginAdapter   String   // "form_login_basic" | "form_login_csrf" | "json_login"
-  tokenExtractionPath  String? // JSON path to the one-time token in the login response, e.g. "info.token"
-  tokenValidationPath  String? // client app path that validates the one-time token, e.g. "/auth/validate"
+  loginAdapter   String   // "form_login_basic" | "form_login_csrf" | "json_login" | "magic_link"
+  tokenExtractionPath    String? // JSON path to the one-time token in the login response, e.g. "info.token"
+  tokenValidationPath    String? // client app path that validates the one-time token, e.g. "/auth/validate"
+  /// For magic_link adapter: JSON path to the redirect URL in the login response, e.g. "data.url" or "link".
+  /// When set, the broker extracts this URL from the login response and redirects the user directly to it,
+  /// bypassing the normal one-time-token + tokenValidationPath flow entirely.
+  magicLinkExtractionPath String?
+  /// Optional JSON template for the login request body.
+  /// Supports {{email}} and {{password}} placeholders (replaced at runtime).
+  /// Any extra static fields in the template are preserved as-is.
+  /// Example: {"user_params":{"email":"{{email}}","password":"{{password}}","external_login_url":true}}
+  /// When blank, the broker sends a flat {[usernameField]: email, [passwordField]: password} body.
+  loginPayloadTemplate   String?
   usernameField  String?  // e.g. "email" or "user_id"
   passwordField  String?  // e.g. "password" or "passAuth"
   environment    String   @default("production")
