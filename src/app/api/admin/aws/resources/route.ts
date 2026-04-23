@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
       environment: body.environment ?? "production",
       organizationId: body.organizationId || null,
       availablePolicyArns: Array.isArray(body.availablePolicyArns) ? body.availablePolicyArns : [],
+      sessionName: body.sessionName?.trim() || null,
     });
 
     return NextResponse.json(resource, { status: 201 });
@@ -137,6 +138,7 @@ export async function PUT(req: NextRequest) {
         externalId: data.externalId || null,
         brokerCredentialRef: data.brokerCredentialRef,
         stsStrategy: data.stsStrategy,
+        sessionName: data.sessionName?.trim() || null,
         ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
         environment: data.environment,
         ...(data.organizationId || existing.organizationId

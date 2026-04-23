@@ -178,6 +178,10 @@ model AwsResource {
   destination          String   @default("https://console.aws.amazon.com/")
   /// Issuer label in CloudTrail, e.g. "internal-broker"
   issuer               String   @default("internal-broker")
+  /// Custom STS session name used in CloudTrail instead of the user's email.
+  /// If empty, the authenticated user's email is used (sanitized to STS format).
+  /// Max 64 chars, allowed: [a-zA-Z0-9+=,.@_-]
+  sessionName          String?
   /// STS session duration in seconds. Min 900, max 43200.
   sessionDurationSeconds Int    @default(3600)
   /// Optional external ID for cross-account trust policy

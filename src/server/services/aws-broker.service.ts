@@ -113,6 +113,8 @@ export const awsBrokerService = {
       externalId: awsResource.externalId ?? undefined,
       brokerCredentialRef: awsResource.brokerCredentialRef,
       stsStrategy: awsResource.stsStrategy as AwsResourceConfig["stsStrategy"],
+      // Custom session name configured per-resource (optional)
+      sessionName: awsResource.sessionName ?? undefined,
     };
 
     // ── Step 3b: Look up user-specific session policies ──────────────────────
@@ -174,8 +176,14 @@ export const awsBrokerService = {
     }
 
     // ── Step 5: Generate AWS Console login URL ────────────────────────────────
-    // The STS session name includes the userId for CloudTrail attribution.
-    const sessionName = `${sanitizeForSessionName(user.email)}`;
+    // If the resource has a custom sessionName configured, use it.
+    // Otherwise fall back to the authenticated user's email (sanitized for STS).
+    // The session name appears in CloudTrail as the RoleSessionName.
+    const sessionName = config.sessionName
+      ? sanitizeForSessionName(config.sessionName)
+      : sanitizeForSessionName(user.email);
+
+    console.log(`[aws-broker] STS session name: "${sessionName}" (source: ${config.sessionName ? 'resource config' : 'user email'})`);
 
     let federationResult: AwsFederationResult;
     try {
@@ -292,6 +300,7 @@ export const awsBrokerService = {
     environment?: string;
     organizationId?: string | null;
     availablePolicyArns?: string[];
+    sessionName?: string | null;
   }) {
     return prisma.awsResource.create({ data });
   },

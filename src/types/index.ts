@@ -177,6 +177,13 @@ export interface AwsResourceConfig {
    */
   stsStrategy: "assume_role" | "federation_token";
   /**
+   * Optional fixed STS session name used in CloudTrail for all users of this resource.
+   * When set, overrides the default behaviour of using the authenticated user's email.
+   * Useful for resources where the same service-account identity is always shown in CloudTrail.
+   * Must match STS RoleSessionName constraints: [a-zA-Z0-9+=,.@_-], max 64 chars.
+   */
+  sessionName?: string;
+  /**
    * IAM managed policy ARNs to attach as session policies.
    * These scope down the assumed role's permissions for this specific session.
    * Populated per-user from the UserAwsPolicy table at launch time.

@@ -396,6 +396,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
     description: initialData?.description || "",
     organizationId: initialData?.organizationId || "",
     availablePolicyArns: (initialData?.availablePolicyArns || []).join('\n'),
+    sessionName: initialData?.sessionName || "",
     accessKeyId: "",
     secretAccessKey: "",
   });
@@ -486,6 +487,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
           description: "",
           organizationId: "",
           availablePolicyArns: "",
+          sessionName: "",
           accessKeyId: "",
           secretAccessKey: "",
         });
@@ -600,6 +602,18 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
               <MenuItem value="federation_token">Federation Token (Identity)</MenuItem>
             </Select>
           </FormControl>
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>SESSION NAME</Typography>
+          <TextField
+            fullWidth
+            variant="outlined"
+            placeholder="e.g. broker-session (leave blank to use user email)"
+            value={formData.sessionName}
+            onChange={(e) => setFormData({ ...formData, sessionName: e.target.value })}
+            helperText="Appears as RoleSessionName in CloudTrail. Blank = authenticated user's email."
+            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+          />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>SESSION TTL (SECONDS)</Typography>
