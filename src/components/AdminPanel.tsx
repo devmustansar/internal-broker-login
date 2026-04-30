@@ -60,6 +60,10 @@ import {
   UserPlus,
   Settings2,
   X,
+  ClipboardList,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -1689,6 +1693,339 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
   );
 }
 
+// ─── Audit Logs Panel ─────────────────────────────────────────────────────────
+
+function AuditLogsPanel() {
+  const theme = useTheme();
+  const { user } = useApp();
+
+  // Filters
+  const [filterUser, setFilterUser]     = useState("");
+  const [filterOrg, setFilterOrg]       = useState("");
+  const [filterAction, setFilterAction] = useState("");
+  const [filterOutcome, setFilterOutcome] = useState("");
+  const [filterResource, setFilterResource] = useState("");
+  const [filterFrom, setFilterFrom]     = useState("");
+  const [filterTo, setFilterTo]         = useState("");
+
+  // Data
+  const [logs, setLogs]       = useState<any[]>([]);
+  const [total, setTotal]     = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState<string | null>(null);
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+
+  // Pagination
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(0);
+
+  // Organizations list for filter dropdown (super_admin only)
+  const [organizations, setOrganizations] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (user?.role === "super_admin") {
+      fetch("/api/admin/organizations").then(r => r.json()).then(setOrganizations).catch(() => {});
+    }
+  }, [user]);
+
+  const fetchLogs = async (resetPage = false) => {
+    setLoading(true);
+    setError(null);
+    const currentPage = resetPage ? 0 : page;
+    if (resetPage) setPage(0);
+
+    const params = new URLSearchParams();
+    if (filterUser)     params.set("userId",         filterUser);
+    if (filterOrg)      params.set("organizationId", filterOrg);
+    if (filterAction)   params.set("action",         filterAction);
+    if (filterOutcome)  params.set("outcome",        filterOutcome);
+    if (filterResource) params.set("resourceKey",    filterResource);
+    if (filterFrom)     params.set("dateFrom",       new Date(filterFrom).toISOString());
+    if (filterTo)       params.set("dateTo",         new Date(filterTo).toISOString());
+    params.set("limit",  String(PAGE_SIZE));
+    params.set("offset", String(currentPage * PAGE_SIZE));
+
+    try {
+      const res = await fetch(`/api/admin/audit-logs?${params.toString()}`);
+      if (!res.ok) throw new Error((await res.json()).error || "Failed to load audit logs");
+      const data = await res.json();
+      setLogs(data.logs);
+      setTotal(data.total);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Re-fetch when page changes
+  useEffect(() => { fetchLogs(); }, [page]);
+
+  const outcomeColor = (outcome: string) => {
+    if (outcome === "success") return "success";
+    if (outcome === "failure") return "error";
+    return "info";
+  };
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  const ALL_ACTIONS = [
+    "user_login", "user_logout", "app_open_attempt", "access_granted", "access_denied",
+    "broker_session_created", "broker_session_ended", "vault_credential_fetched",
+    "upstream_login_success", "upstream_login_failed", "one_time_token_issued",
+    "one_time_token_failed", "redirect_url_issued",
+    "aws_launch_attempt", "aws_secrets_loaded", "aws_secrets_failed",
+    "aws_sts_success", "aws_sts_failed", "aws_signin_token_obtained",
+    "aws_signin_token_failed", "aws_console_redirect_issued", "aws_entitlement_denied",
+  ];
+
+  return (
+    <Box>
+      {/* ── Filters ── */}
+      <Paper elevation={0} sx={{ p: 3, mb: 4, borderRadius: 4, bgcolor: alpha(theme.palette.background.default, 0.6), border: `1px solid ${theme.palette.divider}` }}>
+        <Typography variant="caption" sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1, fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>
+          <Filter size={14} /> FILTERS
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Typography variant="caption" sx={{ mb: 0.5, display: 'block', fontWeight: 700, color: 'text.secondary', fontSize: '0.65rem', letterSpacing: '0.08em' }}>USER ID</Typography>
+            <TextField
+              fullWidth size="small" variant="outlined"
+              placeholder="Paste user ID…"
+              value={filterUser}
+              onChange={e => setFilterUser(e.target.value)}
+              sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: '0.75rem' } }}
+            />
+          </Grid>
+
+          {user?.role === "super_admin" && (
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <Typography variant="caption" sx={{ mb: 0.5, display: 'block', fontWeight: 700, color: 'text.secondary', fontSize: '0.65rem', letterSpacing: '0.08em' }}>ORGANIZATION</Typography>
+              <FormControl fullWidth size="small">
+                <Select value={filterOrg} onChange={e => setFilterOrg(e.target.value)} displayEmpty>
+                  <MenuItem value=""><em>All organizations</em></MenuItem>
+                  {organizations.map((org: any) => (
+                    <MenuItem key={org.id} value={org.id}>{org.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          )}
+
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Typography variant="caption" sx={{ mb: 0.5, display: 'block', fontWeight: 700, color: 'text.secondary', fontSize: '0.65rem', letterSpacing: '0.08em' }}>ACTION</Typography>
+            <FormControl fullWidth size="small">
+              <Select value={filterAction} onChange={e => setFilterAction(e.target.value)} displayEmpty>
+                <MenuItem value=""><em>All actions</em></MenuItem>
+                {ALL_ACTIONS.map(a => <MenuItem key={a} value={a} sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{a}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Grid>
+
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Typography variant="caption" sx={{ mb: 0.5, display: 'block', fontWeight: 700, color: 'text.secondary', fontSize: '0.65rem', letterSpacing: '0.08em' }}>OUTCOME</Typography>
+            <FormControl fullWidth size="small">
+              <Select value={filterOutcome} onChange={e => setFilterOutcome(e.target.value)} displayEmpty>
+                <MenuItem value=""><em>All outcomes</em></MenuItem>
+                <MenuItem value="success">✅ Success</MenuItem>
+                <MenuItem value="failure">❌ Failure</MenuItem>
+                <MenuItem value="info">ℹ️ Info</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Typography variant="caption" sx={{ mb: 0.5, display: 'block', fontWeight: 700, color: 'text.secondary', fontSize: '0.65rem', letterSpacing: '0.08em' }}>RESOURCE KEY</Typography>
+            <TextField
+              fullWidth size="small" variant="outlined"
+              placeholder="e.g. aws-prod-ro"
+              value={filterResource}
+              onChange={e => setFilterResource(e.target.value)}
+              sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: '0.75rem' } }}
+            />
+          </Grid>
+
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Typography variant="caption" sx={{ mb: 0.5, display: 'block', fontWeight: 700, color: 'text.secondary', fontSize: '0.65rem', letterSpacing: '0.08em' }}>FROM</Typography>
+            <TextField
+              fullWidth size="small" type="datetime-local"
+              value={filterFrom}
+              onChange={e => setFilterFrom(e.target.value)}
+              sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem' } }}
+            />
+          </Grid>
+
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <Typography variant="caption" sx={{ mb: 0.5, display: 'block', fontWeight: 700, color: 'text.secondary', fontSize: '0.65rem', letterSpacing: '0.08em' }}>TO</Typography>
+            <TextField
+              fullWidth size="small" type="datetime-local"
+              value={filterTo}
+              onChange={e => setFilterTo(e.target.value)}
+              sx={{ '& .MuiInputBase-input': { fontSize: '0.75rem' } }}
+            />
+          </Grid>
+
+          <Grid size={{ xs: 12, sm: 6, md: 3 }} sx={{ display: 'flex', alignItems: 'flex-end', gap: 1 }}>
+            <Button
+              fullWidth variant="contained" size="medium"
+              onClick={() => fetchLogs(true)}
+              disabled={loading}
+              startIcon={loading ? <CircularProgress size={14} /> : <Filter size={14} />}
+              sx={{ height: 40, fontWeight: 800, fontSize: '0.7rem', letterSpacing: '0.05em' }}
+            >
+              APPLY
+            </Button>
+            <Button
+              variant="outlined" size="medium"
+              onClick={() => {
+                setFilterUser(""); setFilterOrg(""); setFilterAction("");
+                setFilterOutcome(""); setFilterResource(""); setFilterFrom(""); setFilterTo("");
+                setTimeout(() => fetchLogs(true), 0);
+              }}
+              sx={{ height: 40, fontWeight: 800, fontSize: '0.7rem', minWidth: 80 }}
+            >
+              CLEAR
+            </Button>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {/* ── Summary bar ── */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+          {total} event{total !== 1 ? "s" : ""} found
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <IconButton size="small" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
+            <ChevronLeft size={16} />
+          </IconButton>
+          <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+            Page {page + 1} / {Math.max(totalPages, 1)}
+          </Typography>
+          <IconButton size="small" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>
+            <ChevronRight size={16} />
+          </IconButton>
+        </Box>
+      </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }}>{error}</Alert>
+      )}
+
+      {/* ── Table ── */}
+      <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 4, border: `1px solid ${theme.palette.divider}`, bgcolor: alpha(theme.palette.background.paper, 0.5) }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow sx={{ bgcolor: alpha(theme.palette.background.default, 0.8) }}>
+              {["TIMESTAMP", "ACTION", "USER", "RESOURCE", "OUTCOME", "IP", "DETAILS"].map(h => (
+                <TableCell key={h} sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.65rem', letterSpacing: '0.08em', py: 1.5, whiteSpace: 'nowrap' }}>{h}</TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading && (
+              <TableRow>
+                <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                  <CircularProgress size={24} />
+                </TableCell>
+              </TableRow>
+            )}
+            {!loading && logs.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} align="center" sx={{ py: 6, color: 'text.secondary', fontStyle: 'italic' }}>
+                  No audit events found. Apply filters and click APPLY.
+                </TableCell>
+              </TableRow>
+            )}
+            {!loading && logs.map((log: any) => (
+              <>
+                <TableRow
+                  key={log.id}
+                  hover
+                  onClick={() => setExpandedRow(expandedRow === log.id ? null : log.id)}
+                  sx={{ cursor: 'pointer', '&:last-child td': { border: 0 } }}
+                >
+                  <TableCell sx={{ fontSize: '0.7rem', fontFamily: 'monospace', whiteSpace: 'nowrap', color: 'text.secondary' }}>
+                    {new Date(log.timestamp).toLocaleString()}
+                  </TableCell>
+                  <TableCell sx={{ fontSize: '0.7rem', fontFamily: 'monospace' }}>
+                    <Chip
+                      label={log.action}
+                      size="small"
+                      variant="outlined"
+                      sx={{ fontSize: '0.6rem', fontWeight: 800, height: 20, letterSpacing: '0.03em', border: 'none',
+                        bgcolor: log.action.startsWith('aws_') ? alpha(theme.palette.warning.main, 0.08) : alpha(theme.palette.primary.main, 0.06),
+                        color: log.action.startsWith('aws_') ? theme.palette.warning.main : theme.palette.primary.main,
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ fontSize: '0.7rem' }}>
+                    {log.user ? (
+                      <Box>
+                        <Typography variant="caption" sx={{ fontWeight: 700, display: 'block', lineHeight: 1.2 }}>{log.user.name || log.user.email}</Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>{log.user.email}</Typography>
+                      </Box>
+                    ) : (
+                      <Typography variant="caption" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>—</Typography>
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ fontSize: '0.7rem', fontFamily: 'monospace', color: log.resourceKey ? 'text.primary' : 'text.disabled' }}>
+                    {log.resourceKey || "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={log.outcome}
+                      size="small"
+                      color={outcomeColor(log.outcome) as any}
+                      variant="filled"
+                      sx={{ fontSize: '0.6rem', fontWeight: 800, height: 20 }}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ fontSize: '0.65rem', fontFamily: 'monospace', color: 'text.secondary' }}>
+                    {log.ipAddress || "—"}
+                  </TableCell>
+                  <TableCell sx={{ fontSize: '0.65rem', color: log.details ? 'primary.main' : 'text.disabled' }}>
+                    {log.details ? "▶ expand" : "—"}
+                  </TableCell>
+                </TableRow>
+                {expandedRow === log.id && log.details && (
+                  <TableRow key={`${log.id}-detail`}>
+                    <TableCell colSpan={7} sx={{ p: 0, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                      <Box sx={{ bgcolor: alpha(theme.palette.background.default, 0.9), p: 3, m: 0 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'block', mb: 1, fontSize: '0.65rem', letterSpacing: '0.08em' }}>DETAILS</Typography>
+                        <Box
+                          component="pre"
+                          sx={{
+                            m: 0, p: 2, borderRadius: 2, overflow: 'auto', maxHeight: 200,
+                            bgcolor: '#0d0d0f', color: '#a5d6a7',
+                            fontSize: '0.72rem', fontFamily: 'monospace', lineHeight: 1.6,
+                            border: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
+                          }}
+                        >
+                          {JSON.stringify(log.details, null, 2)}
+                        </Box>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {/* Bottom pagination */}
+      {totalPages > 1 && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, mt: 3 }}>
+          <Button size="small" disabled={page === 0} onClick={() => setPage(p => p - 1)} startIcon={<ChevronLeft size={14} />} sx={{ fontWeight: 700 }}>Prev</Button>
+          <Typography variant="caption" sx={{ fontWeight: 700 }}>Page {page + 1} of {totalPages}</Typography>
+          <Button size="small" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} endIcon={<ChevronRight size={14} />} sx={{ fontWeight: 700 }}>Next</Button>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 export default function AdminPanel() {
 
   const [activeTab, setActiveTab] = useState(0);
@@ -1745,7 +2082,8 @@ export default function AdminPanel() {
           <Tab icon={<Rocket size={18} />} iconPosition="start" label="PROVISION" value={0} />
           <Tab icon={<Combine size={18} />} iconPosition="start" label="RESOURCES" value={1} />
           <Tab icon={<Users size={18} />} iconPosition="start" label="IDENTITIES" value={2} />
-          {user?.role === "super_admin" && <Tab icon={<Building2 size={18} />} iconPosition="start" label="ORGANIZATIONS" value={3} />}
+          <Tab icon={<ClipboardList size={18} />} iconPosition="start" label="AUDIT LOGS" value={3} />
+          {user?.role === "super_admin" && <Tab icon={<Building2 size={18} />} iconPosition="start" label="ORGANIZATIONS" value={4} />}
         </Tabs>
       </Box>
 
@@ -1865,7 +2203,18 @@ export default function AdminPanel() {
           </motion.div>
         )}
 
-        {activeTab === 3 && user?.role === "super_admin" && (
+        {activeTab === 3 && (
+          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}>
+            <Box>
+              <Typography variant="caption" sx={{ mb: 6, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'primary.main', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase' }}>
+                <ClipboardList size={16} /> Security Audit Trail
+              </Typography>
+              <AuditLogsPanel />
+            </Box>
+          </motion.div>
+        )}
+
+        {activeTab === 4 && user?.role === "super_admin" && (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}>
             <OrganizationsPanel onSuccess={handleSuccess} onError={handleError} />
           </motion.div>

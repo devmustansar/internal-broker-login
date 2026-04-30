@@ -97,14 +97,25 @@ model AuditLog {
   action           String
   user             User?    @relation(fields: [userId], references: [id])
   userId           String?
+  /// Denormalized for fast filtering — mirrors Resource.resourceKey at log time
+  resourceKey      String?
   resource         Resource? @relation(fields: [resourceId], references: [id])
   resourceId       String?
   brokerSession    BrokerSession? @relation(fields: [brokerSessionId], references: [brokerSessionId])
-  brokerSessionId String?
+  brokerSessionId  String?
+  /// Denormalized org scope at log time — enables org-scoped admin queries
+  organizationId   String?
   timestamp        DateTime @default(now())
   details          Json?
   ipAddress        String?
   outcome          String   // "success" | "failure" | "info"
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([action])
+  @@index([outcome])
+  @@index([timestamp])
+  @@index([resourceKey])
 }
 
 // ─── Secrets Management ───────────────────────────────────────────────────────
