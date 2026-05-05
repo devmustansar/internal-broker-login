@@ -6,13 +6,13 @@ import {
   badRequest,
   serverError,
 } from "@/lib/api-helpers";
-import { isSuperAdmin, isAdminOrAbove } from "@/lib/auth-policy";
+import { isSuperAdmin, isAdminOrAbove, isOrgAdmin, isOrgOwner } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
 
 /**
  * GET /api/admin/organizations
  * Super admin: returns all organizations with counts.
- * Admin: returns only their assigned organizations.
+ * Org admin/owner: returns only their admin-level organizations.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -32,9 +32,26 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(orgs);
     }
 
-    // Admin: only their orgs
+    // Org admin/owner: only orgs where they hold admin or owner role
+    // Also includes orgs from legacy global "admin" role
+    const orgRoles = auth.orgRoles || {};
+    const adminOrgIds = new Set<string>();
+
+    for (const [orgId, role] of Object.entries(orgRoles)) {
+      if (role === "admin" || role === "owner") {
+        adminOrgIds.add(orgId);
+      }
+    }
+
+    // Legacy: global admin role → all assigned orgs
+    if (auth.role === "admin") {
+      for (const orgId of auth.organizationIds || []) {
+        adminOrgIds.add(orgId);
+      }
+    }
+
     const orgs = await prisma.organization.findMany({
-      where: { users: { some: { userId: auth.userId } } },
+      where: { id: { in: Array.from(adminOrgIds) } },
       orderBy: { name: "asc" },
       include: includeOpts,
     });
@@ -77,18 +94,21 @@ export async function POST(req: NextRequest) {
 
 /**
  * PUT /api/admin/organizations
- * Super admin only: updates an organization.
+ * Org owners and super admins can update an organization.
  */
 export async function PUT(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);
     if (!auth) return unauthorized();
-    if (!isSuperAdmin(auth))
-      return forbidden("Only super admins can update organizations");
 
     const data = await req.json();
     if (!data.id || !data.name)
       return badRequest("Missing required fields (id, name)");
+
+    // Must be owner of the org or super_admin
+    if (!isOrgOwner(auth, data.id)) {
+      return forbidden("Only organization owners or super admins can update organizations");
+    }
 
     const updated = await prisma.organization.update({
       where: { id: data.id },

@@ -67,7 +67,7 @@ export const authOptions: NextAuthOptions = {
           where: { email: token.email },
           include: {
             organizations: {
-              select: { organizationId: true },
+              select: { organizationId: true, role: true },
             },
           },
         });
@@ -78,6 +78,12 @@ export const authOptions: NextAuthOptions = {
           token.organizationIds = dbUser.organizations.map(
             (o) => o.organizationId
           );
+          // Build per-org role map: { orgId: "owner" | "admin" | "member" }
+          const orgRoles: Record<string, string> = {};
+          for (const o of dbUser.organizations) {
+            orgRoles[o.organizationId] = o.role;
+          }
+          token.orgRoles = orgRoles;
         }
       }
       return token;
@@ -88,6 +94,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).role = token.role;
         (session.user as any).allowedResourceKeys = token.allowedResourceKeys || [];
         (session.user as any).organizationIds = token.organizationIds || [];
+        (session.user as any).orgRoles = token.orgRoles || {};
       }
       return session;
     },

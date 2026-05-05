@@ -6,12 +6,12 @@ import {
   badRequest,
   serverError,
 } from "@/lib/api-helpers";
-import { isAdminOrAbove, canManageOrg, isSuperAdmin } from "@/lib/auth-policy";
+import { isAdminOrAbove, canManageOrg, isSuperAdmin, isOrgAdmin } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
 
 /**
  * GET /api/admin/users
- * Lists all users with their orgs, resource keys, and per-resource AWS policies.
+ * Lists all users with their orgs (including org roles), resource keys, and per-resource AWS policies.
  * Scoped to the admin's orgs unless super_admin.
  */
 export async function GET(req: NextRequest) {
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
         role: true,
         allowedResourceKeys: true,
         createdAt: true,
-        // UserOrganization join
+        // UserOrganization join — now includes org-scoped role
         organizations: {
           include: { organization: true },
         },
@@ -51,9 +51,17 @@ export async function GET(req: NextRequest) {
 
     // Filter by org scope for non-super-admins
     if (!isSuperAdmin(auth)) {
-      const adminOrgs = new Set(auth.organizationIds || []);
+      // Build set of org IDs where the caller has admin access
+      const adminOrgIds = new Set<string>();
+      for (const [orgId, role] of Object.entries(auth.orgRoles || {})) {
+        if (role === "admin" || role === "owner") adminOrgIds.add(orgId);
+      }
+      if (auth.role === "admin") {
+        for (const orgId of auth.organizationIds || []) adminOrgIds.add(orgId);
+      }
+
       const filtered = users.filter((u) =>
-        u.organizations.some((o) => adminOrgs.has(o.organizationId))
+        u.organizations.some((o) => adminOrgIds.has(o.organizationId))
       );
       return NextResponse.json(filtered);
     }
@@ -66,7 +74,7 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/admin/users
- * Creates a new user with optional org memberships.
+ * Creates a new user with optional org memberships and org-scoped roles.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -84,10 +92,30 @@ export async function POST(req: NextRequest) {
       return forbidden("Only super admins can create super admin users");
     }
 
+    // Only global admins/super admins can create global admins
+    if (data.role === "admin" && auth.role !== "admin" && auth.role !== "super_admin") {
+      return forbidden("Only global administrators can create global admin users");
+    }
+
     // Validate org assignments — admin can only assign their own orgs
-    const organizationIds: string[] = data.organizationIds || [];
+    // Support both legacy format (organizationIds: string[]) and new format
+    // (organizations: { orgId, role }[])
+    const orgAssignments: { orgId: string; role: string }[] = [];
+
+    if (Array.isArray(data.organizations)) {
+      // New format: [{ orgId, role }]
+      for (const o of data.organizations) {
+        orgAssignments.push({ orgId: o.orgId || o.organizationId, role: o.role || "member" });
+      }
+    } else if (Array.isArray(data.organizationIds)) {
+      // Legacy format: string[]
+      for (const orgId of data.organizationIds) {
+        orgAssignments.push({ orgId, role: "member" });
+      }
+    }
+
     if (!isSuperAdmin(auth)) {
-      for (const orgId of organizationIds) {
+      for (const { orgId } of orgAssignments) {
         if (!canManageOrg(auth, orgId)) {
           return forbidden(`You do not have access to organization ${orgId}`);
         }
@@ -102,8 +130,9 @@ export async function POST(req: NextRequest) {
         allowedResourceKeys: data.allowedResourceKeys || [],
         passwordHash: data.password || "password123",
         organizations: {
-          create: organizationIds.map((orgId: string) => ({
+          create: orgAssignments.map(({ orgId, role }) => ({
             organizationId: orgId,
+            role,
           })),
         },
       },

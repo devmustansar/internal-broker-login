@@ -264,7 +264,13 @@ model UserOrganization {
   userId         String
   organization   Organization @relation(fields: [organizationId], references: [id])
   organizationId String
+  /// Organization-scoped role: "owner" | "admin" | "member"
+  /// Owners can manage org settings + promote admins.
+  /// Admins can manage resources and members within the org.
+  /// Members have read-only org access (resource access via allowedResourceKeys).
+  role           String       @default("member")
   createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([userId, organizationId])
 }

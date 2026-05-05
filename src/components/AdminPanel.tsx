@@ -38,6 +38,7 @@ import {
   Tooltip,
   ListItemText,
   Checkbox,
+  Collapse,
 } from "@mui/material";
 import { useApp } from "@/lib/app-context";
 import AdminResourcesList from "@/components/AdminResourcesList";
@@ -64,6 +65,8 @@ import {
   Filter,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -895,7 +898,7 @@ function CreateUserForm({ onSuccess, onError }: AdminActionProps) {
               onChange={(e) => setFormData({ ...formData, role: e.target.value })}
             >
               <MenuItem value="user">Standard Developer</MenuItem>
-              <MenuItem value="admin">Cluster Administrator</MenuItem>
+              {(user?.role === "super_admin" || user?.role === "admin") && <MenuItem value="admin">Cluster Administrator</MenuItem>}
               <MenuItem value="readonly">Read-Only Auditor</MenuItem>
               {user?.role === "super_admin" && <MenuItem value="super_admin">Super Administrator</MenuItem>}
             </Select>
@@ -1092,12 +1095,25 @@ function AssignAppForm({ onSuccess, onError }: AdminActionProps) {
     </Box>
   );
 }
-
 function OrganizationsPanel({ onSuccess, onError }: AdminActionProps) {
   const [orgs, setOrgs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({ name: "", description: "" });
   const theme = useTheme();
+  const { user } = useApp();
+  const isSuperAdminUser = user?.role === "super_admin";
+  const isGlobalAdmin = user?.role === "super_admin" || user?.role === "admin";
+
+  // Inline expand state — tracks which org IDs are expanded
+  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());
+  // Members cache per org
+  const [orgMembers, setOrgMembers] = useState<Record<string, any[]>>({});
+  const [loadingOrgs, setLoadingOrgs] = useState<Set<string>>(new Set());
+  // Add-member state per org
+  const [addState, setAddState] = useState<Record<string, { email: string; role: string; saving: boolean }>>({});
+  // All users for add-member lookup
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [usersLoaded, setUsersLoaded] = useState(false);
 
   const fetchOrgs = async () => {
     try {
@@ -1109,6 +1125,45 @@ function OrganizationsPanel({ onSuccess, onError }: AdminActionProps) {
   };
 
   useEffect(() => { fetchOrgs(); }, []);
+
+  // Lazy-load all users once (for add-member dropdowns)
+  const ensureUsersLoaded = async () => {
+    if (usersLoaded) return;
+    try {
+      const res = await fetch("/api/admin/users");
+      if (res.ok) { setAllUsers(await res.json()); setUsersLoaded(true); }
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchMembers = async (orgId: string) => {
+    setLoadingOrgs((prev) => new Set(prev).add(orgId));
+    try {
+      const res = await fetch(`/api/admin/organizations/members?organizationId=${orgId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setOrgMembers((prev) => ({ ...prev, [orgId]: data }));
+      }
+    } catch (err) { console.error(err); }
+    finally { setLoadingOrgs((prev) => { const n = new Set(prev); n.delete(orgId); return n; }); }
+  };
+
+  const toggleExpand = (orgId: string) => {
+    setExpandedOrgs((prev) => {
+      const n = new Set(prev);
+      if (n.has(orgId)) { n.delete(orgId); } else { n.add(orgId); fetchMembers(orgId); ensureUsersLoaded(); }
+      return n;
+    });
+  };
+
+  // For global admin: expand all orgs and load all members on mount
+  useEffect(() => {
+    if (isGlobalAdmin && orgs.length > 0) {
+      const ids = new Set(orgs.map((o) => o.id));
+      setExpandedOrgs(ids);
+      ids.forEach((id) => fetchMembers(id));
+      ensureUsersLoaded();
+    }
+  }, [isGlobalAdmin, orgs.length]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1124,105 +1179,220 @@ function OrganizationsPanel({ onSuccess, onError }: AdminActionProps) {
       onSuccess(`Organization "${data.name}" created successfully!`);
       setFormData({ name: "", description: "" });
       fetchOrgs();
-    } catch (err: any) {
-      onError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { onError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  const handleChangeRole = async (orgId: string, userId: string, newRole: string) => {
+    try {
+      const res = await fetch("/api/admin/organizations/members", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId: orgId, userId, role: newRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update role");
+      onSuccess("Role updated successfully");
+      fetchMembers(orgId);
+    } catch (err: any) { onError(err.message); }
+  };
+
+  const handleRemoveMember = async (orgId: string, userId: string, email: string) => {
+    try {
+      const res = await fetch("/api/admin/organizations/members", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId: orgId, userId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to remove member");
+      onSuccess(`${email} removed`);
+      fetchMembers(orgId);
+      fetchOrgs();
+    } catch (err: any) { onError(err.message); }
+  };
+
+  const handleAddMember = async (orgId: string) => {
+    const s = addState[orgId];
+    if (!s?.email) return;
+    setAddState((p) => ({ ...p, [orgId]: { ...p[orgId], saving: true } }));
+    try {
+      const matched = allUsers.find((u: any) => u.email === s.email);
+      if (!matched) throw new Error(`User "${s.email}" not found in system.`);
+      const res = await fetch("/api/admin/organizations/members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId: orgId, userId: matched.id, role: s.role || "member" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to add member");
+      onSuccess(`${s.email} added as ${s.role || "member"}`);
+      setAddState((p) => ({ ...p, [orgId]: { email: "", role: "member", saving: false } }));
+      fetchMembers(orgId);
+      fetchOrgs();
+    } catch (err: any) { onError(err.message); setAddState((p) => ({ ...p, [orgId]: { ...p[orgId], saving: false } })); }
+  };
+
+  const orgRoleColor = (role: string) => {
+    if (role === "owner") return "error";
+    if (role === "admin") return "warning";
+    return "default";
   };
 
   return (
     <Stack spacing={8}>
-      <Box>
-        <Typography variant="caption" sx={{ mb: 6, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'primary.main', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase' }}>
-          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'primary.main' }} />
-          Create Organization
-        </Typography>
-        <Box component="form" onSubmit={handleSubmit}>
-          <Grid container spacing={4}>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>ORGANIZATION NAME</Typography>
-              <TextField
-                fullWidth
-                variant="outlined"
-                placeholder="e.g. CodingCops"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
+      {/* Create Organization — super_admin only */}
+      {isSuperAdminUser && (
+        <Box>
+          <Typography variant="caption" sx={{ mb: 6, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'primary.main', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase' }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'primary.main' }} />
+            Create Organization
+          </Typography>
+          <Box component="form" onSubmit={handleSubmit}>
+            <Grid container spacing={4}>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>ORGANIZATION NAME</Typography>
+                <TextField fullWidth variant="outlined" placeholder="e.g. CodingCops" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required />
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>DESCRIPTION</Typography>
+                <TextField fullWidth variant="outlined" placeholder="Brief description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
+              </Grid>
+              <Grid size={12}>
+                <Button fullWidth type="submit" variant="contained" size="large" disabled={loading} sx={{ py: 2, fontWeight: 800 }} startIcon={loading ? <CircularProgress size={20} /> : <Building2 size={20} />}>
+                  Create Organization
+                </Button>
+              </Grid>
             </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>DESCRIPTION</Typography>
-              <TextField
-                fullWidth
-                variant="outlined"
-                placeholder="Brief description of this organization"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              />
-            </Grid>
-            <Grid size={12}>
-              <Button
-                fullWidth
-                type="submit"
-                variant="contained"
-                size="large"
-                disabled={loading}
-                sx={{ py: 2, fontWeight: 800 }}
-                startIcon={loading ? <CircularProgress size={20} /> : <Building2 size={20} />}
-              >
-                Create Organization
-              </Button>
-            </Grid>
-          </Grid>
+          </Box>
         </Box>
-      </Box>
+      )}
 
+      {/* Organizations with inline members */}
       <Box>
         <Typography variant="caption" sx={{ mb: 4, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'text.secondary', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase', letterSpacing: '0.15em' }}>
-          <Building2 size={16} /> Registered Organizations
+          <Building2 size={16} /> {isGlobalAdmin ? "All Organizations & Members" : "Registered Organizations"}
         </Typography>
-        <TableContainer component={Paper} elevation={0} sx={{ bgcolor: 'transparent', border: `1px solid ${theme.palette.divider}`, borderRadius: 4, overflow: 'hidden' }}>
-          <Table>
-            <TableHead sx={{ bgcolor: alpha(theme.palette.background.paper, 0.5) }}>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>NAME</TableCell>
-                <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>DESCRIPTION</TableCell>
-                <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>RESOURCES</TableCell>
-                <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.7rem', py: 2 }}>MEMBERS</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {orgs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} align="center" sx={{ py: 6 }}>
-                    <Typography variant="caption" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>No organizations created yet.</Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                orgs.map((org) => (
-                  <TableRow key={org.id} sx={{ '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.02) } }}>
-                    <TableCell sx={{ py: 2 }}>
-                      <Stack direction="row" spacing={1.5} alignItems="center">
-                        <Building2 size={16} color={theme.palette.primary.main} />
-                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{org.name}</Typography>
-                      </Stack>
-                    </TableCell>
-                    <TableCell sx={{ py: 2 }}>
-                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>{org.description || '—'}</Typography>
-                    </TableCell>
-                    <TableCell sx={{ py: 2 }}>
-                      <Chip label={`${(org._count?.resources || 0) + (org._count?.awsResources || 0)} resources`} size="small" sx={{ fontWeight: 700, fontSize: '0.65rem', bgcolor: alpha(theme.palette.primary.main, 0.1), color: 'primary.light' }} />
-                    </TableCell>
-                    <TableCell sx={{ py: 2 }}>
-                      <Chip label={`${org._count?.users || 0} members`} size="small" sx={{ fontWeight: 700, fontSize: '0.65rem', bgcolor: alpha(theme.palette.success.main, 0.1), color: 'success.light' }} />
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+
+        {orgs.length === 0 ? (
+          <Paper elevation={0} sx={{ p: 6, textAlign: 'center', borderRadius: 4, border: `1px solid ${theme.palette.divider}` }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>No organizations created yet.</Typography>
+          </Paper>
+        ) : (
+          <Stack spacing={2}>
+            {orgs.map((org) => {
+              const isExpanded = expandedOrgs.has(org.id);
+              const membersList = orgMembers[org.id] || [];
+              const isLoading = loadingOrgs.has(org.id);
+              const as = addState[org.id] || { email: "", role: "member", saving: false };
+
+              return (
+                <Paper key={org.id} elevation={0} sx={{ borderRadius: 4, border: `1px solid ${isExpanded ? alpha(theme.palette.primary.main, 0.3) : theme.palette.divider}`, overflow: 'hidden', transition: 'border-color 0.2s' }}>
+                  {/* Org Header Row — clickable to expand */}
+                  <Box
+                    onClick={() => toggleExpand(org.id)}
+                    sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3, py: 2, cursor: 'pointer', '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.03) }, transition: 'background-color 0.15s' }}
+                  >
+                    <Stack direction="row" spacing={2} alignItems="center" flex={1}>
+                      <Building2 size={18} color={theme.palette.primary.main} />
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 800 }}>{org.name}</Typography>
+                        {org.description && <Typography variant="caption" sx={{ color: 'text.secondary' }}>{org.description}</Typography>}
+                      </Box>
+                    </Stack>
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                      <Chip label={`${(org._count?.resources || 0) + (org._count?.awsResources || 0)} resources`} size="small" sx={{ fontWeight: 700, fontSize: '0.6rem', bgcolor: alpha(theme.palette.primary.main, 0.08), color: 'primary.light' }} />
+                      <Chip label={`${org._count?.users || 0} members`} size="small" sx={{ fontWeight: 700, fontSize: '0.6rem', bgcolor: alpha(theme.palette.success.main, 0.08), color: 'success.light' }} />
+                      {isExpanded ? <ChevronUp size={16} color={theme.palette.text.secondary} /> : <ChevronDown size={16} color={theme.palette.text.secondary} />}
+                    </Stack>
+                  </Box>
+
+                  {/* Expanded: Inline Members */}
+                  <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                    <Box sx={{ borderTop: `1px solid ${theme.palette.divider}`, px: 3, py: 2, bgcolor: alpha(theme.palette.background.default, 0.3) }}>
+                      {/* Add member inline */}
+                      <Box sx={{ mb: 2, p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.03), border: `1px solid ${alpha(theme.palette.primary.main, 0.08)}` }}>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', letterSpacing: '0.08em', minWidth: 90 }}>ADD MEMBER</Typography>
+                          <TextField variant="outlined" placeholder="user@company.com" value={as.email} size="small"
+                            onChange={(e) => setAddState((p) => ({ ...p, [org.id]: { ...as, email: e.target.value } }))}
+                            sx={{ flex: 2, '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: '0.8rem' } }} />
+                          <FormControl size="small" sx={{ minWidth: 120 }}>
+                            <Select value={as.role} onChange={(e) => setAddState((p) => ({ ...p, [org.id]: { ...as, role: e.target.value } }))}>
+                              <MenuItem value="member">Member</MenuItem>
+                              <MenuItem value="admin">Admin</MenuItem>
+                              <MenuItem value="owner">Owner</MenuItem>
+                            </Select>
+                          </FormControl>
+                          <Button variant="contained" size="small" disabled={as.saving || !as.email} onClick={() => handleAddMember(org.id)}
+                            startIcon={as.saving ? <CircularProgress size={12} /> : <UserPlus size={12} />}
+                            sx={{ fontWeight: 800, px: 2, whiteSpace: 'nowrap', fontSize: '0.7rem' }}>
+                            {as.saving ? '…' : 'Add'}
+                          </Button>
+                        </Stack>
+                      </Box>
+
+                      {/* Members Table */}
+                      {isLoading ? (
+                        <Stack alignItems="center" py={3}><CircularProgress size={22} /><Typography variant="caption" sx={{ mt: 1, color: 'text.secondary' }}>Loading…</Typography></Stack>
+                      ) : membersList.length === 0 ? (
+                        <Typography variant="caption" sx={{ color: 'text.secondary', fontStyle: 'italic', display: 'block', textAlign: 'center', py: 3 }}>No members yet.</Typography>
+                      ) : (
+                        <TableContainer component={Paper} elevation={0} sx={{ bgcolor: 'transparent', border: `1px solid ${theme.palette.divider}`, borderRadius: 3, overflow: 'hidden' }}>
+                          <Table size="small">
+                            <TableHead sx={{ bgcolor: alpha(theme.palette.background.paper, 0.6) }}>
+                              <TableRow>
+                                <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.65rem', letterSpacing: '0.05em' }}>USER</TableCell>
+                                <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.65rem', letterSpacing: '0.05em' }}>GLOBAL ROLE</TableCell>
+                                <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.65rem', letterSpacing: '0.05em' }}>ORG ROLE</TableCell>
+                                <TableCell sx={{ fontWeight: 800, color: 'text.secondary', fontSize: '0.65rem', letterSpacing: '0.05em' }} align="right">ACTIONS</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {membersList.map((m: any) => (
+                                <TableRow key={m.id} sx={{ '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.03) } }}>
+                                  <TableCell sx={{ py: 1.5 }}>
+                                    <Stack spacing={0.25}>
+                                      <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.8rem' }}>{m.user?.name}</Typography>
+                                      <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace', fontSize: '0.65rem' }}>{m.user?.email}</Typography>
+                                    </Stack>
+                                  </TableCell>
+                                  <TableCell sx={{ py: 1.5 }}>
+                                    <Chip label={m.user?.role} size="small" variant="outlined"
+                                      color={(m.user?.role === "super_admin" ? "error" : m.user?.role === "admin" ? "warning" : "default") as any}
+                                      sx={{ fontWeight: 700, fontSize: '0.6rem', textTransform: 'uppercase' }} />
+                                  </TableCell>
+                                  <TableCell sx={{ py: 1.5 }}>
+                                    <FormControl size="small" sx={{ minWidth: 110 }}>
+                                      <Select value={m.role} onChange={(e) => handleChangeRole(org.id, m.userId, e.target.value)}
+                                        sx={{ fontWeight: 700, fontSize: '0.75rem', color: m.role === 'owner' ? 'error.main' : m.role === 'admin' ? 'warning.main' : 'text.primary', '& .MuiSelect-select': { py: 0.5 } }}>
+                                        <MenuItem value="member">Member</MenuItem>
+                                        <MenuItem value="admin">Admin</MenuItem>
+                                        <MenuItem value="owner">Owner</MenuItem>
+                                      </Select>
+                                    </FormControl>
+                                  </TableCell>
+                                  <TableCell sx={{ py: 1.5 }} align="right">
+                                    <Tooltip title="Remove from organization">
+                                      <IconButton size="small" onClick={() => handleRemoveMember(org.id, m.userId, m.user?.email)}
+                                        sx={{ bgcolor: alpha(theme.palette.error.main, 0.08), color: 'error.main', '&:hover': { bgcolor: alpha(theme.palette.error.main, 0.18) } }}>
+                                        <Trash2 size={13} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      )}
+                    </Box>
+                  </Collapse>
+                </Paper>
+              );
+            })}
+          </Stack>
+        )}
       </Box>
     </Stack>
   );
@@ -1454,8 +1624,8 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
                       <Stack direction="row" flexWrap="wrap" gap={0.5}>
                         {user.organizations?.length > 0 ? (
                           user.organizations.map((o: any) => (
-                            <Chip key={o.id} icon={<Building2 size={10} />} label={o.organization?.name || "—"} size="small"
-                              sx={{ fontSize: "0.65rem", fontWeight: 600, bgcolor: alpha(theme.palette.primary.main, 0.08), color: "primary.light" }} />
+                            <Chip key={o.id} icon={<Building2 size={10} />} label={`${o.organization?.name || "—"} · ${o.role || "member"}`} size="small"
+                              sx={{ fontSize: "0.65rem", fontWeight: 600, bgcolor: alpha(theme.palette.primary.main, o.role === "owner" ? 0.16 : o.role === "admin" ? 0.12 : 0.08), color: o.role === "owner" ? "error.light" : o.role === "admin" ? "warning.light" : "primary.light" }} />
                           ))
                         ) : <Typography variant="caption" sx={{ color: "text.secondary", fontStyle: "italic" }}>None</Typography>}
                       </Stack>
@@ -2028,10 +2198,12 @@ function AuditLogsPanel() {
 
 export default function AdminPanel() {
 
-  const [activeTab, setActiveTab] = useState(0);
   const [appTypeToggle, setAppTypeToggle] = useState<"web" | "aws">("web");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const theme = useTheme();
+  const { user } = useApp();
+  const isGlobalAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const [activeTab, setActiveTab] = useState(0);
 
   const [editingWebResource, setEditingWebResource] = useState<any>(null);
   const [editingAwsResource, setEditingAwsResource] = useState<any>(null);
@@ -2048,8 +2220,8 @@ export default function AdminPanel() {
     setTimeout(() => setMessage(null), 5000);
   };
 
-  const { user } = useApp();
-  if (user?.role !== "admin" && user?.role !== "super_admin") {
+  const hasOrgRole = (Object.values((user?.orgRoles || {}) as Record<string, string>)).some((r) => r === "admin" || r === "owner");
+  if (!isGlobalAdmin && !hasOrgRole) {
     return (
       <Container maxWidth="sm" sx={{ mt: 10 }}>
         <Paper elevation={1} sx={{ p: 6, textAlign: 'center', borderRadius: 6, bgcolor: alpha(theme.palette.error.main, 0.05), border: `1px solid ${alpha(theme.palette.error.main, 0.1)}` }}>
@@ -2062,7 +2234,7 @@ export default function AdminPanel() {
   }
 
   return (
-    <Box sx={{ maxWidth: '1000px', mx: 'auto', py: 2 }}>
+    <Box sx={{ maxWidth: '1200px', mx: 'auto', py: 2 }}>
       <Box sx={{ mb: 6, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'flex-start', md: 'flex-end' }, justifyContent: 'space-between', gap: 4, borderBottom: `1px solid ${theme.palette.divider}`, pb: 4 }}>
         <Box>
           <Typography variant="h2" sx={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -2074,16 +2246,18 @@ export default function AdminPanel() {
         <Tabs 
           value={activeTab} 
           onChange={(_, v) => setActiveTab(v)}
+          variant="scrollable"
+          scrollButtons="auto"
           sx={{ 
             '& .MuiTabs-indicator': { height: 4, borderRadius: '4px 4px 0 0' },
-            '& .MuiTab-root': { fontWeight: 800, fontSize: '0.75rem', letterSpacing: '0.05em', px: 3 }
+            '& .MuiTab-root': { fontWeight: 800, fontSize: '0.7rem', letterSpacing: '0.05em', px: 2, minWidth: 'auto' }
           }}
         >
           <Tab icon={<Rocket size={18} />} iconPosition="start" label="PROVISION" value={0} />
           <Tab icon={<Combine size={18} />} iconPosition="start" label="RESOURCES" value={1} />
           <Tab icon={<Users size={18} />} iconPosition="start" label="IDENTITIES" value={2} />
-          <Tab icon={<ClipboardList size={18} />} iconPosition="start" label="AUDIT LOGS" value={3} />
-          {user?.role === "super_admin" && <Tab icon={<Building2 size={18} />} iconPosition="start" label="ORGANIZATIONS" value={4} />}
+          {isGlobalAdmin && <Tab icon={<ClipboardList size={18} />} iconPosition="start" label="AUDIT LOGS" value={3} />}
+          <Tab icon={<Building2 size={18} />} iconPosition="start" label="ORGANIZATIONS" value={4} />
         </Tabs>
       </Box>
 
@@ -2214,7 +2388,7 @@ export default function AdminPanel() {
           </motion.div>
         )}
 
-        {activeTab === 4 && user?.role === "super_admin" && (
+        {activeTab === 4 && (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}>
             <OrganizationsPanel onSuccess={handleSuccess} onError={handleError} />
           </motion.div>

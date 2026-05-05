@@ -101,7 +101,7 @@ export default function Dashboard() {
           </Box>
 
           <Stack direction="row" spacing={2} alignItems="center">
-            {(user?.role === "admin" || user?.role === "super_admin") && (
+            {(user?.role === "admin" || user?.role === "super_admin" || (Object.values((user?.orgRoles || {}) as Record<string, string>)).some((r) => r === "admin" || r === "owner")) && (
               <Paper elevation={0} sx={{ p: 0.5, borderRadius: 3, display: 'flex', bgcolor: alpha(theme.palette.background.paper, 0.5), border: `1px solid ${theme.palette.divider}` }}>
                 <Button 
                   variant={view === 'apps' ? 'contained' : 'text'}

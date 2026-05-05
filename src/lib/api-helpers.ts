@@ -18,6 +18,7 @@ export async function getAuthContext(
       email: session.user.email as string,
       role: (session.user as any).role,
       organizationIds: (session.user as any).organizationIds || [],
+      orgRoles: (session.user as any).orgRoles || {},
     };
   }
 

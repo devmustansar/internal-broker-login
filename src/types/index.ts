@@ -9,6 +9,8 @@ export interface InternalUser {
   createdAt: string;
 }
 
+export type OrgRole = "owner" | "admin" | "member";
+
 export interface Organization {
   id: string;
   name: string;
@@ -152,6 +154,8 @@ export interface AuthContext {
   email: string;
   role: InternalUser["role"];
   organizationIds: string[];
+  /** Per-org role mappings — { orgId: "owner" | "admin" | "member" } */
+  orgRoles: Record<string, OrgRole>;
   iat?: number;
   exp?: number;
 }
