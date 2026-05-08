@@ -1,5 +1,6 @@
 "use client";
 
+import { APP_NAME } from "@/lib/constants";
 import { 
   Box, 
   Container, 
@@ -75,7 +76,7 @@ export default function LoginPage() {
             </motion.div>
             
             <Typography variant="h1" sx={{ mb: 1 }}>
-              CredBroker
+              {APP_NAME}
             </Typography>
             <Typography 
               variant="subtitle1" 

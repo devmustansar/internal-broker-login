@@ -19,6 +19,13 @@ import {
   LinearProgress
 } from "@mui/material";
 import { Cloud, ExternalLink, ShieldCheck, Cpu, KeyRound } from "lucide-react";
+import { 
+  STR_AWS_TENANT,
+  STR_AWS_FAIL_LAUNCH,
+  STR_AWS_SUCCESS,
+  STR_AWS_GENERATING,
+  STR_AWS_LAUNCH
+} from "@/lib/constants";
 
 interface AwsCardProps {
   resource: {
@@ -58,7 +65,7 @@ export default function AwsAppCard({ resource }: AwsCardProps) {
       setLaunched(true);
       setTimeout(() => setLaunched(false), 4000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to launch AWS Console");
+      setError(err instanceof Error ? err.message : STR_AWS_FAIL_LAUNCH);
     } finally {
       setIsLoading(false);
     }
@@ -130,7 +137,7 @@ export default function AwsAppCard({ resource }: AwsCardProps) {
                 sx={{ height: 18, fontSize: '0.6rem', fontWeight: 900, borderRadius: 1.5 }} 
               />
               <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                • AWS TENANT
+                • {STR_AWS_TENANT}
               </Typography>
             </Stack>
           </Box>
@@ -153,7 +160,7 @@ export default function AwsAppCard({ resource }: AwsCardProps) {
         {launched && !error && (
           <Fade in={true}>
             <Alert severity="success" variant="outlined" icon={<ShieldCheck size={18} />} sx={{ mt: 3, borderRadius: 2, fontSize: '0.75rem', py: 0, bgcolor: alpha(theme.palette.success.main, 0.05) }}>
-              Federation established.
+              {STR_AWS_SUCCESS}
             </Alert>
           </Fade>
         )}
@@ -179,7 +186,7 @@ export default function AwsAppCard({ resource }: AwsCardProps) {
           }}
           startIcon={<ExternalLink size={18} />}
         >
-          {isLoading ? "Generating STS..." : "Federate Service Console"}
+          {isLoading ? STR_AWS_GENERATING : STR_AWS_LAUNCH}
         </Button>
       </CardActions>
       

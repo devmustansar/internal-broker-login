@@ -21,6 +21,11 @@ import {
   Fade
 } from "@mui/material";
 import { Server, ExternalLink, ShieldAlert, Globe, Activity } from "lucide-react";
+import {
+  STR_APP_FAIL_LAUNCH,
+  STR_APP_PROVISIONING,
+  STR_APP_LAUNCH
+} from "@/lib/constants";
 
 interface AppCardProps {
   resource: Resource;
@@ -55,7 +60,7 @@ export default function AppCard({ resource, onOpen }: AppCardProps) {
       }
       onOpen(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to open app");
+      setError(err instanceof Error ? err.message : STR_APP_FAIL_LAUNCH);
     } finally {
       setIsLoading(false);
     }
@@ -183,7 +188,7 @@ export default function AppCard({ resource, onOpen }: AppCardProps) {
           }}
           startIcon={<ExternalLink size={18} />}
         >
-          {isLoading ? "Provisioning..." : "Launch Handshake"}
+          {isLoading ? STR_APP_PROVISIONING : STR_APP_LAUNCH}
         </Button>
       </CardActions>
     </Card>

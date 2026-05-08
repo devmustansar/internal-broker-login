@@ -1,6 +1,7 @@
 "use client";
 
 import { useApp } from "@/lib/app-context";
+import { APP_NAME } from "@/lib/constants";
 import { 
   AppBar, 
   Toolbar, 
@@ -53,7 +54,7 @@ export default function TopBar() {
             </Box>
             <Box>
               <Stack direction="row" spacing={1} alignItems="center">
-                <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>CredBroker</Typography>
+                <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>{APP_NAME}</Typography>
                 <Chip 
                   label="PROMETHEUS" 
                   size="small" 

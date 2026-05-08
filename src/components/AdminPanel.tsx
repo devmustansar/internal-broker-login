@@ -39,6 +39,8 @@ import {
   ListItemText,
   Checkbox,
   Collapse,
+  TablePagination,
+  Autocomplete,
 } from "@mui/material";
 import { useApp } from "@/lib/app-context";
 import AdminResourcesList from "@/components/AdminResourcesList";
@@ -67,6 +69,7 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
+  Search,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -1314,9 +1317,19 @@ function OrganizationsPanel({ onSuccess, onError }: AdminActionProps) {
                       <Box sx={{ mb: 2, p: 2, borderRadius: 2, bgcolor: alpha(theme.palette.primary.main, 0.03), border: `1px solid ${alpha(theme.palette.primary.main, 0.08)}` }}>
                         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
                           <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', letterSpacing: '0.08em', minWidth: 90 }}>ADD MEMBER</Typography>
-                          <TextField variant="outlined" placeholder="user@company.com" value={as.email} size="small"
-                            onChange={(e) => setAddState((p) => ({ ...p, [org.id]: { ...as, email: e.target.value } }))}
-                            sx={{ flex: 2, '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: '0.8rem' } }} />
+                          <Autocomplete
+                            size="small"
+                            options={allUsers}
+                            getOptionLabel={(option) => `${option.name} (${option.email})`}
+                            sx={{ flex: 2 }}
+                            value={allUsers.find(u => u.email === as.email) || null}
+                            onChange={(_, newValue) => {
+                              setAddState((p) => ({ ...p, [org.id]: { ...as, email: newValue ? newValue.email : "" } }))
+                            }}
+                            renderInput={(params) => (
+                              <TextField {...params} variant="outlined" placeholder="Search user by name or email..." sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: '0.8rem' } }} />
+                            )}
+                          />
                           <FormControl size="small" sx={{ minWidth: 120 }}>
                             <Select value={as.role} onChange={(e) => setAddState((p) => ({ ...p, [org.id]: { ...as, role: e.target.value } }))}>
                               <MenuItem value="member">Member</MenuItem>
@@ -1464,6 +1477,14 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
   const [editingPolicies, setEditingPolicies] = useState<Record<string, string[]>>({});
   const [managing, setManaging] = useState<string | null>(null); // resourceKey being acted on
 
+  // Search & Pagination
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  // Add User modal
+  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+
   const fetchAll = async () => {
     setLoading(true);
     try {
@@ -1580,8 +1601,42 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
     return "default";
   };
 
+  const filteredUsers = users.filter((u) => {
+    const term = searchQuery.toLowerCase();
+    return u.name?.toLowerCase().includes(term) || u.email?.toLowerCase().includes(term);
+  });
+  
+  const paginatedUsers = filteredUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
+  const handleAddUserSuccess = (msg: string) => {
+    onSuccess(msg);
+    setIsAddUserOpen(false);
+    fetchAll();
+  };
+
   return (
     <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <TextField
+          variant="outlined"
+          size="small"
+          placeholder="Search by name or email..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          InputProps={{
+            startAdornment: <Search size={16} color={theme.palette.text.secondary} style={{ marginRight: 8 }} />
+          }}
+          sx={{ width: 300, '& .MuiOutlinedInput-root': { borderRadius: 3 } }}
+        />
+        <Button 
+          variant="contained" 
+          startIcon={<Plus size={16} />} 
+          onClick={() => setIsAddUserOpen(true)}
+          sx={{ borderRadius: 3, fontWeight: 700 }}
+        >
+          Add New User
+        </Button>
+      </Box>
       {loading ? (
         <Stack alignItems="center" py={8}>
           <CircularProgress size={32} />
@@ -1601,14 +1656,14 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {users.length === 0 ? (
+              {paginatedUsers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                     <Typography variant="caption" sx={{ color: "text.secondary", fontStyle: "italic" }}>No users found.</Typography>
                   </TableCell>
                 </TableRow>
               ) : (
-                users.map((user) => (
+                paginatedUsers.map((user) => (
                   <TableRow key={user.id} sx={{ "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.03) } }}>
                     <TableCell sx={{ py: 2 }}>
                       <Stack spacing={0.5}>
@@ -1682,6 +1737,38 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
           </Table>
         </TableContainer>
       )}
+
+      {!loading && (
+        <TablePagination
+          component="div"
+          count={filteredUsers.length}
+          page={page}
+          onPageChange={(_, newPage) => setPage(newPage)}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10));
+            setPage(0);
+          }}
+          sx={{ borderTop: 'none', color: 'text.secondary', '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': { fontSize: '0.75rem', fontWeight: 600 } }}
+        />
+      )}
+
+      {/* ── Add User Dialog ── */}
+      <Dialog open={isAddUserOpen} onClose={() => setIsAddUserOpen(false)} maxWidth="md" fullWidth
+        PaperProps={{ sx: { borderRadius: 5, bgcolor: theme.palette.background.paper, backgroundImage: "none", border: `1px solid ${theme.palette.divider}` } }}>
+        <DialogTitle sx={{ fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1 }}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <UserPlus size={20} color={theme.palette.success.main} />
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800, color: 'success.main' }}>Provision Active Identity</Typography>
+            </Box>
+          </Stack>
+          <IconButton size="small" onClick={() => setIsAddUserOpen(false)}><X size={16} /></IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <CreateUserForm onSuccess={handleAddUserSuccess} onError={onError} />
+        </DialogContent>
+      </Dialog>
 
       {/* ── Assign Resource Dialog ── */}
       <Dialog open={!!assignTarget} onClose={closeAssign} maxWidth="sm" fullWidth
@@ -2363,15 +2450,6 @@ export default function AdminPanel() {
                   <Users size={16} /> All Users
                 </Typography>
                 <UsersPanel onSuccess={handleSuccess} onError={handleError} />
-              </Box>
-
-              {/* ── Create new user ── */}
-              <Box>
-                <Typography variant="caption" sx={{ mb: 6, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'success.main', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase' }}>
-                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
-                  Provision Active Identity
-                </Typography>
-                <CreateUserForm onSuccess={handleSuccess} onError={handleError} />
               </Box>
             </Stack>
           </motion.div>
