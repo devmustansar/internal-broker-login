@@ -12,6 +12,7 @@ import {
   DebugPanel,
 } from "@/components/SessionPanel";
 import AdminPanel from "@/components/AdminPanel";
+import UserCredentialVault from "@/components/UserCredentialVault";
 import { APP_DESCRIPTION, APP_ADMIN_DESCRIPTION } from "@/lib/constants";
 import { 
   Box, 
@@ -52,7 +53,7 @@ export default function Dashboard() {
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [resourceError, setResourceError] = useState<string | null>(null);
   const [modal, setModal] = useState<OpenAppResponse | null>(null);
-  const [view, setView] = useState<"apps" | "admin">("apps");
+  const [view, setView] = useState<"apps" | "credentials" | "admin">("apps");
 
   useEffect(() => {
     const load = async () => {
@@ -97,21 +98,29 @@ export default function Dashboard() {
               Hello, {user?.name?.split(" ")[0]}
             </Typography>
             <Typography variant="subtitle1">
-              {view === "apps" ? APP_DESCRIPTION : APP_ADMIN_DESCRIPTION}
+              {view === "apps" ? APP_DESCRIPTION : view === "credentials" ? "Securely access credentials shared with you." : APP_ADMIN_DESCRIPTION}
             </Typography>
           </Box>
 
           <Stack direction="row" spacing={2} alignItems="center">
-            {(user?.role === "admin" || user?.role === "super_admin" || (Object.values((user?.orgRoles || {}) as Record<string, string>)).some((r) => r === "admin" || r === "owner")) && (
-              <Paper elevation={0} sx={{ p: 0.5, borderRadius: 3, display: 'flex', bgcolor: alpha(theme.palette.background.paper, 0.5), border: `1px solid ${theme.palette.divider}` }}>
-                <Button 
-                  variant={view === 'apps' ? 'contained' : 'text'}
-                  onClick={() => setView('apps')}
-                  startIcon={<LayoutDashboard size={16} />}
-                  sx={{ borderRadius: 2.5, px: 2, py: 0.8, color: view === 'apps' ? 'white' : 'text.secondary' }}
-                >
-                  Dashboard
-                </Button>
+            <Paper elevation={0} sx={{ p: 0.5, borderRadius: 3, display: 'flex', bgcolor: alpha(theme.palette.background.paper, 0.5), border: `1px solid ${theme.palette.divider}` }}>
+              <Button 
+                variant={view === 'apps' ? 'contained' : 'text'}
+                onClick={() => setView('apps')}
+                startIcon={<LayoutDashboard size={16} />}
+                sx={{ borderRadius: 2.5, px: 2, py: 0.8, color: view === 'apps' ? 'white' : 'text.secondary' }}
+              >
+                Dashboard
+              </Button>
+              <Button
+                variant={view === 'credentials' ? 'contained' : 'text'}
+                onClick={() => setView('credentials')}
+                startIcon={<Database size={16} />}
+                sx={{ borderRadius: 2.5, px: 2, py: 0.8, color: view === 'credentials' ? 'white' : 'text.secondary' }}
+              >
+                Shared Credentials
+              </Button>
+              {(user?.role === "admin" || user?.role === "super_admin" || (Object.values((user?.orgRoles || {}) as Record<string, string>)).some((r) => r === "admin" || r === "owner")) && (
                 <Button 
                   variant={view === 'admin' ? 'contained' : 'text'}
                   onClick={() => setView('admin')}
@@ -120,8 +129,8 @@ export default function Dashboard() {
                 >
                   Admin
                 </Button>
-              </Paper>
-            )}
+              )}
+            </Paper>
 
             <AnimatePresence>
               {activeSessions > 0 && (
@@ -145,7 +154,13 @@ export default function Dashboard() {
           </Stack>
         </Box>
 
-        {view === "apps" ? (
+        {view === "credentials" ? (
+          <Fade in={true}>
+            <Box>
+              <UserCredentialVault />
+            </Box>
+          </Fade>
+        ) : view === "apps" ? (
           <Grid container spacing={4} sx={{ position: 'relative', zIndex: 1 }}>
             {/* Main Area */}
             <Grid size={{ xs: 12, xl: 9 }}>

@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     if (!isAdminOrAbove(auth)) return forbidden();
 
     const data = await req.json();
-    const { email, resourceKey, policyArns } = data;
+    const { email, resourceKey, policyArns, sessionName } = data;
     if (!email || !resourceKey) return badRequest("Missing required fields (email, resourceKey)");
 
     const resolved = await resolveAndAuthorize(auth, email, resourceKey);
@@ -79,8 +79,8 @@ export async function POST(req: NextRequest) {
       }
       await prisma.userAwsPolicy.upsert({
         where: { userId_awsResourceId: { userId: user!.id, awsResourceId: awsResource.id } },
-        update: { policyArns },
-        create: { userId: user!.id, awsResourceId: awsResource.id, policyArns },
+        update: { policyArns, ...(sessionName !== undefined ? { sessionName: sessionName || null } : {}) },
+        create: { userId: user!.id, awsResourceId: awsResource.id, policyArns, sessionName: sessionName || null },
       });
     }
 
@@ -106,7 +106,7 @@ export async function PATCH(req: NextRequest) {
     if (!isAdminOrAbove(auth)) return forbidden();
 
     const data = await req.json();
-    const { email, resourceKey, policyArns } = data;
+    const { email, resourceKey, policyArns, sessionName } = data;
     if (!email || !resourceKey || !Array.isArray(policyArns)) {
       return badRequest("Missing required fields (email, resourceKey, policyArns)");
     }
@@ -127,8 +127,8 @@ export async function PATCH(req: NextRequest) {
 
     await prisma.userAwsPolicy.upsert({
       where: { userId_awsResourceId: { userId: user!.id, awsResourceId: awsResource.id } },
-      update: { policyArns },
-      create: { userId: user!.id, awsResourceId: awsResource.id, policyArns },
+      update: { policyArns, ...(sessionName !== undefined ? { sessionName: sessionName || null } : {}) },
+      create: { userId: user!.id, awsResourceId: awsResource.id, policyArns, sessionName: sessionName || null },
     });
 
     return NextResponse.json({ message: `Updated ${policyArns.length} session policy(ies) for ${email}` });

@@ -21,6 +21,8 @@ model User {
   sessions            BrokerSession[]
   organizations       UserOrganization[]
   awsPolicies         UserAwsPolicy[]
+  credentialGroupMemberships CredentialGroupMember[]
+  credentialShares           CredentialShare[]
 }
 
 model Resource {
@@ -238,6 +240,8 @@ model UserAwsPolicy {
   awsResourceId String
   /// IAM managed policy ARNs to attach as session policies
   policyArns   String[]
+  /// Custom session name for CloudTrail identity (optional, max 64 chars)
+  sessionName  String?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -253,9 +257,11 @@ model Organization {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  users        UserOrganization[]
-  resources    Resource[]
-  awsResources AwsResource[]
+  users             UserOrganization[]
+  resources         Resource[]
+  awsResources      AwsResource[]
+  sharedCredentials SharedCredential[]
+  credentialGroups  CredentialGroup[]
 }
 
 model UserOrganization {
@@ -273,4 +279,83 @@ model UserOrganization {
   updatedAt      DateTime     @updatedAt
 
   @@unique([userId, organizationId])
+}
+
+// ─── Credential Manager ──────────────────────────────────────────────────────
+//
+// SharedCredential  — an encrypted credential record (app name, URL, username/password)
+// CredentialGroup   — a named collection of credentials for bulk sharing
+// CredentialGroupEntry   — M:N join between credentials and groups
+// CredentialGroupMember  — M:N join between groups and users (dev gets all creds in group)
+// CredentialShare   — direct 1:1 share of a single credential with a user
+
+model SharedCredential {
+  id               String   @id @default(uuid())
+  appName          String
+  loginUrl         String?
+  description      String?
+  /// AES-256-GCM encrypted JSON: {"username":"...","password":"..."}
+  encryptedPayload String
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  organizationId   String
+  /// userId of the admin who created this credential
+  createdBy        String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  groups           CredentialGroupEntry[]
+  shares           CredentialShare[]
+
+  @@index([organizationId])
+}
+
+model CredentialGroup {
+  id             String   @id @default(uuid())
+  name           String
+  description    String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+  /// userId of the admin who created this group
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  credentials    CredentialGroupEntry[]
+  members        CredentialGroupMember[]
+
+  @@unique([name, organizationId])
+  @@index([organizationId])
+}
+
+model CredentialGroupEntry {
+  id           String           @id @default(uuid())
+  credential   SharedCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  credentialId String
+  group        CredentialGroup  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId      String
+  createdAt    DateTime         @default(now())
+
+  @@unique([credentialId, groupId])
+}
+
+model CredentialGroupMember {
+  id        String          @id @default(uuid())
+  group     CredentialGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId   String
+  user      User            @relation(fields: [userId], references: [id])
+  userId    String
+  createdAt DateTime        @default(now())
+
+  @@unique([groupId, userId])
+}
+
+model CredentialShare {
+  id           String           @id @default(uuid())
+  credential   SharedCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  credentialId String
+  user         User             @relation(fields: [userId], references: [id])
+  userId       String
+  createdAt    DateTime         @default(now())
+
+  @@unique([credentialId, userId])
 }

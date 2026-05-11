@@ -44,6 +44,7 @@ import {
 } from "@mui/material";
 import { useApp } from "@/lib/app-context";
 import AdminResourcesList from "@/components/AdminResourcesList";
+import CredentialVaultPanel from "@/components/CredentialVaultPanel";
 import { 
   ShieldCheck, 
   Database, 
@@ -1469,7 +1470,7 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
 
   // Assign dialog
   const [assignTarget, setAssignTarget] = useState<any | null>(null);
-  const [assignForm, setAssignForm] = useState({ resourceKey: "", policyArns: [] as string[] });
+  const [assignForm, setAssignForm] = useState({ resourceKey: "", policyArns: [] as string[], sessionName: "" });
   const [saving, setSaving] = useState(false);
 
   // Manage dialog
@@ -1508,7 +1509,7 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
   // ── Assign helpers ────────────────────────────────────────────────────────
   const openAssign = (user: any) => {
     setAssignTarget(user);
-    setAssignForm({ resourceKey: "", policyArns: [] });
+    setAssignForm({ resourceKey: "", policyArns: [], sessionName: "" });
   };
   const closeAssign = () => setAssignTarget(null);
   const matchedAwsResource = awsResources.find((r) => r.resourceKey === assignForm.resourceKey);
@@ -1525,6 +1526,7 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
           email: assignTarget.email,
           resourceKey: assignForm.resourceKey,
           ...(assignForm.policyArns.length > 0 ? { policyArns: assignForm.policyArns } : {}),
+          ...(assignForm.sessionName.trim() ? { sessionName: assignForm.sessionName.trim() } : {}),
         }),
       });
       const data = await res.json();
@@ -1562,13 +1564,24 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to remove resource");
       onSuccess(data.message || "Access revoked");
-      // Refresh manage target
+      // Refresh user list and then update manageTarget from the fresh data
       await fetchAll();
-      setManageTarget((prev: any) => prev ? {
-        ...prev,
-        allowedResourceKeys: prev.allowedResourceKeys.filter((k: string) => k !== resourceKey),
-        awsPolicies: (prev.awsPolicies || []).filter((ap: any) => ap.awsResource?.resourceKey !== resourceKey),
-      } : null);
+      // Fetch the user fresh to get updated allowedResourceKeys and awsPolicies
+      const freshUsersRes = await fetch("/api/admin/users");
+      if (freshUsersRes.ok) {
+        const freshUsers = await freshUsersRes.json();
+        const updated = freshUsers.find((u: any) => u.email === userEmail);
+        if (updated) {
+          setManageTarget(updated);
+          const init: Record<string, string[]> = {};
+          (updated.awsPolicies || []).forEach((ap: any) => {
+            init[ap.awsResource?.resourceKey] = [...ap.policyArns];
+          });
+          setEditingPolicies(init);
+        } else {
+          setManageTarget(null);
+        }
+      }
     } catch (err: any) {
       onError(err.message);
     } finally {
@@ -1789,7 +1802,7 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
               <Typography variant="caption" sx={{ mb: 1, display: "block", fontWeight: 800, color: "text.secondary", letterSpacing: "0.08em" }}>SELECT RESOURCE</Typography>
               <FormControl fullWidth variant="outlined">
                 <Select displayEmpty value={assignForm.resourceKey}
-                  onChange={(e) => setAssignForm({ resourceKey: e.target.value, policyArns: [] })}>
+                  onChange={(e) => setAssignForm({ resourceKey: e.target.value, policyArns: [], sessionName: "" })}>
                   <MenuItem value="" disabled><em>Choose a resource…</em></MenuItem>
                   {allResources.length > 0 && <MenuItem disabled sx={{ fontSize: "0.65rem", fontWeight: 800, color: "text.secondary" }}>— WEB RESOURCES —</MenuItem>}
                   {allResources.map((r: any) => (
@@ -1838,6 +1851,24 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
                     ))}
                   </Stack>
                 )}
+              </Box>
+            )}
+            {matchedAwsResource && (
+              <Box>
+                <Typography variant="caption" sx={{ mb: 1, display: "block", fontWeight: 800, color: "text.secondary", letterSpacing: "0.08em" }}>
+                  SESSION NAME
+                  <Typography component="span" variant="caption" sx={{ fontWeight: 400, ml: 1, color: "text.secondary" }}>(custom CloudTrail identity, optional)</Typography>
+                </Typography>
+                <TextField
+                  fullWidth
+                  variant="outlined"
+                  size="small"
+                  placeholder={assignTarget?.email?.split("@")[0] || "session-name"}
+                  value={assignForm.sessionName}
+                  onChange={(e) => setAssignForm((p) => ({ ...p, sessionName: e.target.value }))}
+                  sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: '0.85rem' } }}
+                  helperText="Max 64 chars. Allowed: a-zA-Z0-9+=,.@_-"
+                />
               </Box>
             )}
             {matchedAwsResource && availablePolicies.length === 0 && (
@@ -2345,6 +2376,7 @@ export default function AdminPanel() {
           <Tab icon={<Users size={18} />} iconPosition="start" label="IDENTITIES" value={2} />
           {isGlobalAdmin && <Tab icon={<ClipboardList size={18} />} iconPosition="start" label="AUDIT LOGS" value={3} />}
           <Tab icon={<Building2 size={18} />} iconPosition="start" label="ORGANIZATIONS" value={4} />
+          <Tab icon={<KeyRound size={18} />} iconPosition="start" label="CREDENTIAL VAULT" value={5} />
         </Tabs>
       </Box>
 
@@ -2469,6 +2501,17 @@ export default function AdminPanel() {
         {activeTab === 4 && (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}>
             <OrganizationsPanel onSuccess={handleSuccess} onError={handleError} />
+          </motion.div>
+        )}
+
+        {activeTab === 5 && (
+          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}>
+            <Box>
+              <Typography variant="caption" sx={{ mb: 6, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'primary.main', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase' }}>
+                <KeyRound size={16} /> Credential Vault
+              </Typography>
+              <CredentialVaultPanel onSuccess={handleSuccess} onError={handleError} />
+            </Box>
           </motion.div>
         )}
       </Paper>
