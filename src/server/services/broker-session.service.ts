@@ -43,8 +43,8 @@ export const brokerSessionService = {
       throw new Error("User not found");
     }
 
-    // 2. Access control check
-    const allowed = appAccessService.canUserAccessResource(user, resourceKey);
+    // 2. Access control check via UserResourceAccess join table
+    const allowed = user.role === "super_admin" || await appAccessService.canUserAccessResource(internalUserId, resourceKey);
     auditLogService.log({
       action: allowed ? "access_granted" : "access_denied",
       internalUserId,
@@ -139,6 +139,7 @@ export const brokerSessionService = {
       const session: BrokerSession = {
         brokerSessionId,
         internalUserId,
+        resourceId: resource.id,
         resourceKey,
         managedAccountKey: managedAccount.accountKey,
         upstreamCookies: {},
@@ -224,6 +225,7 @@ export const brokerSessionService = {
     const session: BrokerSession = {
       brokerSessionId,
       internalUserId,
+      resourceId: resource.id,
       resourceKey,
       managedAccountKey: managedAccount.accountKey,
       // No upstream cookies captured in this flow — the client manages its own auth

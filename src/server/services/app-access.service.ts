@@ -26,9 +26,40 @@ export const appAccessService = {
     return ma as any;
   },
 
-  canUserAccessResource(user: InternalUser, resourceKey: string): boolean {
-    if (user.allowedResourceKeys.includes("*")) return true;
-    return user.allowedResourceKeys.includes(resourceKey);
+  /**
+   * Check if a user has access to a resource via the UserResourceAccess table.
+   * Super-admins with role "super_admin" bypass this check elsewhere.
+   */
+  async canUserAccessResource(userId: string, resourceKey: string): Promise<boolean> {
+    // Look up the resource in both tables
+    const webResource = await prisma.resource.findUnique({ where: { resourceKey } });
+    const awsResource = webResource ? null : await prisma.awsResource.findUnique({ where: { resourceKey } });
+
+    if (!webResource && !awsResource) return false;
+
+    const access = await prisma.userResourceAccess.findFirst({
+      where: {
+        userId,
+        ...(webResource ? { resourceId: webResource.id } : { awsResourceId: awsResource!.id }),
+      },
+    });
+
+    return !!access;
+  },
+
+  /**
+   * Get all resource keys the user has access to via UserResourceAccess.
+   */
+  async getUserResourceKeys(userId: string): Promise<string[]> {
+    const accesses = await prisma.userResourceAccess.findMany({
+      where: { userId },
+      include: {
+        resource: { select: { resourceKey: true } },
+        awsResource: { select: { resourceKey: true } },
+      },
+    });
+
+    return accesses.map(a => a.resource?.resourceKey || a.awsResource?.resourceKey || "").filter(Boolean);
   },
 
   async getUserById(userId: string): Promise<InternalUser | null> {

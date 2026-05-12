@@ -12,7 +12,6 @@ model User {
   email               String   @unique
   name                String
   role                String   // "super_admin" | "admin" | "user" | "readonly"
-  allowedResourceKeys String[] // ["*"] means all
   passwordHash        String?  // nullable for mock login/SSO
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -23,6 +22,7 @@ model User {
   awsPolicies         UserAwsPolicy[]
   credentialGroupMemberships CredentialGroupMember[]
   credentialShares           CredentialShare[]
+  resourceAccess             UserResourceAccess[]
 }
 
 model Resource {
@@ -61,6 +61,7 @@ model Resource {
   accounts       ManagedAccount[]
   sessions       BrokerSession[]
   auditLogs      AuditLog[]
+  userAccess     UserResourceAccess[]
 }
 
 model ManagedAccount {
@@ -226,6 +227,24 @@ model AwsResource {
   organizationId       String?
 
   userPolicies         UserAwsPolicy[]
+  userAccess           UserResourceAccess[]
+}
+
+/// Join table: associates a User with a Resource (web) or AwsResource by ID.
+/// Replaces the old User.allowedResourceKeys string array.
+model UserResourceAccess {
+  id            String       @id @default(uuid())
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  /// Exactly one of resourceId / awsResourceId is set
+  resource      Resource?    @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  resourceId    String?
+  awsResource   AwsResource? @relation(fields: [awsResourceId], references: [id], onDelete: Cascade)
+  awsResourceId String?
+  createdAt     DateTime     @default(now())
+
+  @@unique([userId, resourceId])
+  @@unique([userId, awsResourceId])
 }
 
 /// Per-user session policy selections for AWS resources.
@@ -273,7 +292,7 @@ model UserOrganization {
   /// Organization-scoped role: "owner" | "admin" | "member"
   /// Owners can manage org settings + promote admins.
   /// Admins can manage resources and members within the org.
-  /// Members have read-only org access (resource access via allowedResourceKeys).
+  /// Members have read-only org access (resource access via UserResourceAccess join table).
   role           String       @default("member")
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt

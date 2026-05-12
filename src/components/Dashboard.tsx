@@ -285,7 +285,7 @@ export default function Dashboard() {
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>RESOURCE SCOPE</Typography>
                       <Typography variant="caption" sx={{ fontWeight: 800, fontFamily: 'monospace', color: 'primary.light' }}>
-                        {user?.allowedResourceKeys?.includes("*") ? "ALL_RESOURCES" : `${user?.allowedResourceKeys?.length || 0} ENTRIES`}
+                        {user?.role === "super_admin" ? "ALL_RESOURCES" : `${resources.length} ENTRIES`}
                       </Typography>
                     </Box>
                   </Stack>

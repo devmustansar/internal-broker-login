@@ -796,10 +796,8 @@ function CreateUserForm({ onSuccess, onError }: AdminActionProps) {
     name: "",
     password: "",
     role: "user",
-    allowedResourceKeys: [] as string[],
     organizationIds: [] as string[],
   });
-  const [resourceInput, setResourceInput] = useState("");
 
   useEffect(() => {
     fetch("/api/admin/organizations").then(r => r.json()).then(setOrganizations).catch(console.error);
@@ -822,24 +820,12 @@ function CreateUserForm({ onSuccess, onError }: AdminActionProps) {
         name: "",
         password: "",
         role: "user",
-        allowedResourceKeys: [],
         organizationIds: [],
       });
-      setResourceInput("");
     } catch (err: any) {
       onError(err.message);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const addResource = () => {
-    if (resourceInput && !formData.allowedResourceKeys.includes(resourceInput)) {
-      setFormData({
-        ...formData,
-        allowedResourceKeys: [...formData.allowedResourceKeys, resourceInput],
-      });
-      setResourceInput("");
     }
   };
 
@@ -909,31 +895,10 @@ function CreateUserForm({ onSuccess, onError }: AdminActionProps) {
           </FormControl>
         </Grid>
         <Grid size={12}>
-          <Typography variant="caption" sx={{ mb: 2, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>SCOPED PERMISSIONS</Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 3, p: 2, borderRadius: 3, bgcolor: alpha(theme.palette.background.paper, 0.4), border: `1px solid ${theme.palette.divider}` }}>
-            {formData.allowedResourceKeys.map((key) => (
-              <Chip 
-                key={key} 
-                label={key} 
-                onDelete={() => setFormData({ ...formData, allowedResourceKeys: formData.allowedResourceKeys.filter((k) => k !== key) })}
-                sx={{ borderRadius: 2, fontWeight: 700, bgcolor: alpha(theme.palette.primary.main, 0.1), color: 'primary.light' }}
-              />
-            ))}
-            {formData.allowedResourceKeys.length === 0 && (
-              <Typography variant="caption" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>No endpoints assigned to this identity yet.</Typography>
-            )}
+          <Typography variant="caption" sx={{ mb: 2, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>RESOURCE ACCESS</Typography>
+          <Box sx={{ p: 2, borderRadius: 3, bgcolor: alpha(theme.palette.info.main, 0.06), border: `1px dashed ${alpha(theme.palette.info.main, 0.3)}` }}>
+            <Typography variant="body2" sx={{ color: 'info.light', fontStyle: 'italic' }}>Resources can be assigned to this user after creation via the &quot;Assign Resource&quot; workflow in the Users table.</Typography>
           </Box>
-          <Stack direction="row" spacing={2}>
-            <TextField
-              variant="outlined"
-              placeholder="Enter resource key (e.g. jenkins-ci or *)"
-              value={resourceInput}
-              onChange={(e) => setResourceInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addResource())}
-              sx={{ flexGrow: 1, '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
-            />
-            <Button variant="outlined" onClick={addResource} sx={{ px: 3, borderRadius: 3 }}>Assign Key</Button>
-          </Stack>
         </Grid>
         <Grid size={12}>
           <Typography variant="caption" sx={{ mb: 2, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>ORGANIZATION MEMBERSHIP</Typography>
@@ -1566,7 +1531,7 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
       onSuccess(data.message || "Access revoked");
       // Refresh user list and then update manageTarget from the fresh data
       await fetchAll();
-      // Fetch the user fresh to get updated allowedResourceKeys and awsPolicies
+      // Fetch the user fresh to get updated resourceAccess and awsPolicies
       const freshUsersRes = await fetch("/api/admin/users");
       if (freshUsersRes.ok) {
         const freshUsers = await freshUsersRes.json();
@@ -1700,12 +1665,16 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
                     </TableCell>
                     <TableCell sx={{ py: 2 }}>
                       <Stack direction="row" flexWrap="wrap" gap={0.5} maxWidth={200}>
-                        {user.allowedResourceKeys?.length > 0 ? (
-                          user.allowedResourceKeys.map((k: string) => (
-                            <Chip key={k} label={k} size="small"
-                              sx={{ fontFamily: "monospace", fontSize: "0.6rem", fontWeight: 700, bgcolor: alpha(theme.palette.success.main, 0.08), color: "success.light" }} />
-                          ))
-                        ) : <Typography variant="caption" sx={{ color: "text.secondary", fontStyle: "italic" }}>None</Typography>}
+                        {user.resourceAccess?.length > 0 ? (
+                          user.resourceAccess.map((ra: any) => {
+                            const rName = ra.resource?.name || ra.awsResource?.name;
+                            const rKey = ra.resource?.resourceKey || ra.awsResource?.resourceKey;
+                            return (
+                              <Chip key={ra.id} label={rName || rKey} size="small"
+                                sx={{ fontFamily: rName ? 'inherit' : 'monospace', fontSize: '0.6rem', fontWeight: 700, bgcolor: alpha(theme.palette.success.main, 0.08), color: 'success.light' }} />
+                            );
+                          })
+                        ) : <Typography variant="caption" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>None</Typography>}
                       </Stack>
                     </TableCell>
                     <TableCell sx={{ py: 2 }}>
@@ -1829,7 +1798,7 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
                 </Select>
               </FormControl>
             </Box>
-            {assignTarget?.allowedResourceKeys?.includes(assignForm.resourceKey) && (
+            {assignTarget?.resourceAccess?.some((ra: any) => (ra.resource?.resourceKey || ra.awsResource?.resourceKey) === assignForm.resourceKey) && (
               <Alert severity="info" variant="outlined" sx={{ borderRadius: 3 }}>
                 User already has access. You can still update policies below.
               </Alert>
@@ -1902,25 +1871,27 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
           <IconButton size="small" onClick={closeManage}><X size={16} /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ pt: 1 }}>
-          {manageTarget?.allowedResourceKeys?.length === 0 ? (
+          {manageTarget?.resourceAccess?.length === 0 ? (
             <Typography variant="body2" sx={{ color: "text.secondary", fontStyle: "italic", py: 4, textAlign: "center" }}>
               No resources assigned yet.
             </Typography>
           ) : (
             <Stack spacing={2} mt={1}>
-              {(manageTarget?.allowedResourceKeys || []).map((rk: string) => {
+              {(manageTarget?.resourceAccess || []).map((ra: any) => {
+                const rk = ra.resource?.resourceKey || ra.awsResource?.resourceKey;
+                const rName = ra.resource?.name || ra.awsResource?.name;
                 const awsRes = awsResources.find((r: any) => r.resourceKey === rk);
                 const existingPolicies: string[] = editingPolicies[rk] ?? [];
                 const availForThis: string[] = awsRes?.availablePolicyArns || [];
                 const isActing = managing === rk;
 
                 return (
-                  <Paper key={rk} variant="outlined" sx={{ p: 2.5, borderRadius: 3, border: `1px solid ${theme.palette.divider}` }}>
+                  <Paper key={ra.id} variant="outlined" sx={{ p: 2.5, borderRadius: 3, border: `1px solid ${theme.palette.divider}` }}>
                     <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={2}>
                       <Box flex={1} minWidth={0}>
                         <Stack direction="row" spacing={1} alignItems="center" mb={0.5}>
                           {awsRes ? <Server size={14} color={theme.palette.warning.main} /> : <Globe size={14} color={theme.palette.primary.main} />}
-                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{awsRes?.name || rk}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>{rName || rk}</Typography>
                           <Chip label={awsRes ? "AWS" : "Web"} size="small" color={awsRes ? "warning" : "primary"} variant="outlined"
                             sx={{ fontSize: "0.55rem", fontWeight: 800, height: 18 }} />
                         </Stack>

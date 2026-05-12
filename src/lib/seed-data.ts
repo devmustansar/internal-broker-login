@@ -84,7 +84,6 @@ export const SEED_USERS: InternalUser[] = [
     email: "alice@company.com",
     name: "Alice Admin",
     role: "admin",
-    allowedResourceKeys: ["*"],
     createdAt: "2024-01-01T00:00:00Z",
   },
   {
@@ -92,7 +91,6 @@ export const SEED_USERS: InternalUser[] = [
     email: "bob@company.com",
     name: "Bob Dev",
     role: "user",
-    allowedResourceKeys: ["client-app-staging", "internal-dashboard"],
     createdAt: "2024-01-15T00:00:00Z",
   },
   {
@@ -100,7 +98,6 @@ export const SEED_USERS: InternalUser[] = [
     email: "carol@company.com",
     name: "Carol Readonly",
     role: "readonly",
-    allowedResourceKeys: ["internal-dashboard"],
     createdAt: "2024-02-01T00:00:00Z",
   },
 ];

@@ -16,9 +16,8 @@ export interface ISessionRepository {
 
 class PostgresSessionRepository implements ISessionRepository {
   async create(session: BrokerSession): Promise<void> {
-    // We need to resolve resourceId and managedAccountId from keys
     const resource = await prisma.resource.findUnique({
-      where: { resourceKey: session.resourceKey },
+      where: { resourceKey: session.resourceKey || '' },
     });
     const account = await prisma.managedAccount.findFirst({
       where: { accountKey: session.managedAccountKey, resourceId: resource?.id },
@@ -52,6 +51,7 @@ class PostgresSessionRepository implements ISessionRepository {
     return {
       brokerSessionId: session.brokerSessionId,
       internalUserId: session.userId,
+      resourceId: session.resourceId,
       resourceKey: session.resource.resourceKey,
       managedAccountKey: session.managedAccount.accountKey,
       upstreamCookies: session.upstreamCookies as any,
@@ -88,6 +88,7 @@ class PostgresSessionRepository implements ISessionRepository {
     return sessions.map((s) => ({
       brokerSessionId: s.brokerSessionId,
       internalUserId: s.userId,
+      resourceId: s.resourceId,
       resourceKey: s.resource.resourceKey,
       managedAccountKey: s.managedAccount.accountKey,
       upstreamCookies: s.upstreamCookies as any,

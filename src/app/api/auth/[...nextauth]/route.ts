@@ -54,7 +54,6 @@ export const authOptions: NextAuthOptions = {
             email: user.email,
             name: user.name || "Unknown",
             role: "user",
-            allowedResourceKeys: [],
           },
         });
       }
@@ -74,7 +73,6 @@ export const authOptions: NextAuthOptions = {
         if (dbUser) {
           token.userId = dbUser.id;
           token.role = dbUser.role;
-          token.allowedResourceKeys = dbUser.allowedResourceKeys;
           token.organizationIds = dbUser.organizations.map(
             (o) => o.organizationId
           );
@@ -92,7 +90,6 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as any).id = token.userId;
         (session.user as any).role = token.role;
-        (session.user as any).allowedResourceKeys = token.allowedResourceKeys || [];
         (session.user as any).organizationIds = token.organizationIds || [];
         (session.user as any).orgRoles = token.orgRoles || {};
       }

@@ -16,7 +16,6 @@ async function main() {
       email: "alice@company.com",
       name: "Alice Admin",
       role: "admin",
-      allowedResourceKeys: ["*"],
     },
   });
 
@@ -25,7 +24,6 @@ async function main() {
       email: "bob@company.com",
       name: "Bob Developer",
       role: "user",
-      allowedResourceKeys: ["client-app-staging", "internal-dashboard"],
     },
   });
 
@@ -34,7 +32,6 @@ async function main() {
       email: "carol@company.com",
       name: "Carol Viewer",
       role: "readonly",
-      allowedResourceKeys: ["internal-dashboard"],
     },
   });
 
@@ -110,6 +107,29 @@ async function main() {
         role: "viewer",
       },
     ],
+  });
+
+  // 4. Resource Access — assign via join table instead of legacy string array
+  // Alice (admin) gets access to all resources
+  await prisma.userResourceAccess.createMany({
+    data: [
+      { userId: alice.id, resourceId: prodApp.id },
+      { userId: alice.id, resourceId: stagingApp.id },
+      { userId: alice.id, resourceId: dashboardApp.id },
+    ],
+  });
+
+  // Bob gets staging + dashboard
+  await prisma.userResourceAccess.createMany({
+    data: [
+      { userId: bob.id, resourceId: stagingApp.id },
+      { userId: bob.id, resourceId: dashboardApp.id },
+    ],
+  });
+
+  // Carol gets dashboard only
+  await prisma.userResourceAccess.create({
+    data: { userId: carol.id, resourceId: dashboardApp.id },
   });
 
   console.log("Database seeded successfully!");

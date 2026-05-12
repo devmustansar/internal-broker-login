@@ -26,11 +26,17 @@ export async function GET(req: NextRequest) {
         email: true,
         name: true,
         role: true,
-        allowedResourceKeys: true,
         createdAt: true,
         // UserOrganization join — now includes org-scoped role
         organizations: {
           include: { organization: true },
+        },
+        // Resource access via join table
+        resourceAccess: {
+          include: {
+            resource: { select: { id: true, resourceKey: true, name: true } },
+            awsResource: { select: { id: true, resourceKey: true, name: true } },
+          },
         },
         // Per-resource AWS policy mappings
         awsPolicies: {
@@ -61,7 +67,7 @@ export async function GET(req: NextRequest) {
       }
 
       const filtered = users.filter((u) =>
-        u.organizations.some((o) => adminOrgIds.has(o.organizationId))
+        u.organizations.some((o: any) => adminOrgIds.has(o.organizationId))
       );
       return NextResponse.json(filtered);
     }
@@ -127,7 +133,6 @@ export async function POST(req: NextRequest) {
         email: data.email,
         name: data.name,
         role: data.role,
-        allowedResourceKeys: data.allowedResourceKeys || [],
         passwordHash: data.password || "password123",
         organizations: {
           create: orgAssignments.map(({ orgId, role }) => ({

@@ -66,9 +66,9 @@ export const awsBrokerService = {
     }
 
     // ── Step 2: Entitlement check ─────────────────────────────────────────────
-    // Reuses the same ACL logic as web app resources:
-    // user.allowedResourceKeys must include '*' or the exact resourceKey.
-    const isEntitled = appAccessService.canUserAccessResource(user, resourceKey);
+    // Check user's resource access via the UserResourceAccess join table.
+    // Super admins bypass via role check.
+    const isEntitled = user.role === "super_admin" || await appAccessService.canUserAccessResource(internalUserId, resourceKey);
 
     auditLogService.log({
       action: isEntitled ? "access_granted" : "aws_entitlement_denied",
@@ -131,6 +131,14 @@ export const awsBrokerService = {
       config.policyArns = userPolicy.policyArns;
       console.log(
         `[aws-broker] Applying ${userPolicy.policyArns.length} session policies for user ${user.email} on ${resourceKey}`
+      );
+    }
+
+    // Apply per-user session name override if configured
+    if (userPolicy?.sessionName) {
+      config.sessionName = userPolicy.sessionName;
+      console.log(
+        `[aws-broker] Using per-user session name "${userPolicy.sessionName}" for ${user.email} on ${resourceKey}`
       );
     }
 

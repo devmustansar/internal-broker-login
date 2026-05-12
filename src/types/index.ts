@@ -5,7 +5,6 @@ export interface InternalUser {
   email: string;
   name: string;
   role: "super_admin" | "admin" | "user" | "readonly";
-  allowedResourceKeys: string[]; // '*' means all
   createdAt: string;
 }
 
@@ -72,7 +71,8 @@ export type BrokerSessionStatus =
 export interface BrokerSession {
   brokerSessionId: string;
   internalUserId: string;
-  resourceKey: string;
+  resourceId: string;
+  resourceKey?: string; // derived from relation for display
   managedAccountKey: string;
   upstreamCookies: Record<string, string>;
   expiresAt: string; // ISO

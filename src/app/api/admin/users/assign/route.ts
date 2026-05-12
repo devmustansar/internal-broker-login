@@ -58,13 +58,20 @@ export async function POST(req: NextRequest) {
 
     const resolved = await resolveAndAuthorize(auth, email, resourceKey);
     if (resolved.error) return badRequest(resolved.error);
-    const { user, awsResource } = resolved;
+    const { user, awsResource, webResource } = resolved;
 
-    // Grant access
-    if (!user!.allowedResourceKeys.includes("*") && !user!.allowedResourceKeys.includes(resourceKey)) {
-      await prisma.user.update({
-        where: { id: user!.id },
-        data: { allowedResourceKeys: { push: resourceKey } },
+    // Grant access via UserResourceAccess join table
+    if (webResource) {
+      await prisma.userResourceAccess.upsert({
+        where: { userId_resourceId: { userId: user!.id, resourceId: webResource.id } },
+        update: {},
+        create: { userId: user!.id, resourceId: webResource.id },
+      });
+    } else if (awsResource) {
+      await prisma.userResourceAccess.upsert({
+        where: { userId_awsResourceId: { userId: user!.id, awsResourceId: awsResource.id } },
+        update: {},
+        create: { userId: user!.id, awsResourceId: awsResource.id },
       });
     }
 
@@ -154,18 +161,19 @@ export async function DELETE(req: NextRequest) {
 
     const resolved = await resolveAndAuthorize(auth, email, resourceKey);
     if (resolved.error) return badRequest(resolved.error);
-    const { user, awsResource } = resolved;
+    const { user, awsResource, webResource } = resolved;
 
-    // Remove from allowedResourceKeys
-    await prisma.user.update({
-      where: { id: user!.id },
-      data: {
-        allowedResourceKeys: user!.allowedResourceKeys.filter((k) => k !== resourceKey),
-      },
-    });
-
-    // Delete AWS session policy record if exists
+    // Remove from UserResourceAccess join table
+    if (webResource) {
+      await prisma.userResourceAccess.deleteMany({
+        where: { userId: user!.id, resourceId: webResource.id },
+      });
+    }
     if (awsResource) {
+      await prisma.userResourceAccess.deleteMany({
+        where: { userId: user!.id, awsResourceId: awsResource.id },
+      });
+      // Delete AWS session policy record if exists
       await prisma.userAwsPolicy.deleteMany({
         where: { userId: user!.id, awsResourceId: awsResource.id },
       });

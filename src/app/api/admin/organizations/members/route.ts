@@ -36,8 +36,13 @@ export async function GET(req: NextRequest) {
             email: true,
             name: true,
             role: true,
-            allowedResourceKeys: true,
             createdAt: true,
+            resourceAccess: {
+              include: {
+                resource: { select: { id: true, resourceKey: true, name: true } },
+                awsResource: { select: { id: true, resourceKey: true, name: true } },
+              },
+            },
           },
         },
       },

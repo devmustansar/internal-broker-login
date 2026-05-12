@@ -20,7 +20,6 @@ import {
 } from "@mui/material";
 import { Cloud, ExternalLink, ShieldCheck, Cpu, KeyRound } from "lucide-react";
 import { 
-  STR_AWS_TENANT,
   STR_AWS_FAIL_LAUNCH,
   STR_AWS_SUCCESS,
   STR_AWS_GENERATING,
@@ -137,7 +136,7 @@ export default function AwsAppCard({ resource }: AwsCardProps) {
                 sx={{ height: 18, fontSize: '0.6rem', fontWeight: 900, borderRadius: 1.5 }} 
               />
               <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                • {STR_AWS_TENANT}
+                • AWS FEDERATION
               </Typography>
             </Stack>
           </Box>

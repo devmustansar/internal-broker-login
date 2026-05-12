@@ -92,6 +92,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           {
             brokerSessionId: result.brokerSessionId,
             internalUserId: (user as any)?.id ?? "",
+            resourceId: result.resourceId ?? "",
             resourceKey: result.resourceKey,
             managedAccountKey: "",
             upstreamCookies: {},

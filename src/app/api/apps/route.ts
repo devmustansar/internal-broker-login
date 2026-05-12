@@ -11,24 +11,29 @@ export async function GET(req: NextRequest) {
     const user = await appAccessService.getUserById(auth.userId);
     if (!user) return unauthorized("User not found");
 
-    const allWebResources = await appAccessService.getAllResources();
-    const allAwsResources = await prisma.awsResource.findMany({
-      where: { isActive: true },
+    // Super admins see everything
+    if (user.role === "super_admin") {
+      const allWeb = await appAccessService.getAllResources();
+      const allAws = await prisma.awsResource.findMany({ where: { isActive: true } });
+      return NextResponse.json([...allWeb, ...allAws]);
+    }
+
+    // For other users, look up their resource access via the join table
+    const accesses = await prisma.userResourceAccess.findMany({
+      where: { userId: auth.userId },
+      include: {
+        resource: true,
+        awsResource: true,
+      },
     });
 
-    const accessibleWeb =
-      user.allowedResourceKeys.includes("*")
-        ? allWebResources
-        : allWebResources.filter((r) =>
-            user.allowedResourceKeys.includes(r.resourceKey)
-          );
+    const accessibleWeb = accesses
+      .filter(a => a.resource && a.resource.isActive)
+      .map(a => a.resource!);
 
-    const accessibleAws =
-      user.allowedResourceKeys.includes("*")
-        ? allAwsResources
-        : allAwsResources.filter((r: any) =>
-            user.allowedResourceKeys.includes(r.resourceKey)
-          );
+    const accessibleAws = accesses
+      .filter(a => a.awsResource && a.awsResource.isActive)
+      .map(a => a.awsResource!);
 
     return NextResponse.json([...accessibleWeb, ...accessibleAws]);
   } catch (err) {

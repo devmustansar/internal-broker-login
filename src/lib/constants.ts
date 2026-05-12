@@ -10,7 +10,6 @@ export const APP_DESCRIPTION = "Securely broker access to internal applications.
 export const APP_ADMIN_DESCRIPTION = "Manage applications and system settings.";
 
 // App Card Strings
-export const STR_AWS_TENANT = "AWS TENANT";
 export const STR_AWS_FAIL_LAUNCH = "Failed to launch AWS Console";
 export const STR_AWS_SUCCESS = "Federation established.";
 export const STR_AWS_GENERATING = "Generating STS...";
