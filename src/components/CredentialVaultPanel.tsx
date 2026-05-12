@@ -7,8 +7,9 @@ import {
   Tabs, Tab, List, ListItem, ListItemText, ListItemSecondaryAction, Grid,
   Autocomplete, TablePagination, InputAdornment
 } from "@mui/material";
-import { Plus, X, Lock, Users, AppWindow, Search } from "lucide-react";
+import { Plus, X, Lock, Users, AppWindow, Search, Upload } from "lucide-react";
 import { useApp } from "@/lib/app-context";
+import ExcelImportModal from "./ExcelImportModal";
 
 const PAGE_OPTIONS = [5, 10, 25];
 
@@ -33,6 +34,7 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
 
   // Create forms
   const [openAddCred, setOpenAddCred] = useState(false);
+  const [openImportModal, setOpenImportModal] = useState(false);
   const [credForm, setCredForm] = useState({ appName: "", loginUrl: "", description: "", username: "", password: "" });
   const [savingCred, setSavingCred] = useState(false);
   const [openAddGroup, setOpenAddGroup] = useState(false);
@@ -220,9 +222,16 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
             {organizations.map((org) => (<MenuItem key={org.id} value={org.id}>{org.name}</MenuItem>))}
           </Select>
         </FormControl>
-        <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => activeTab === 0 ? setOpenAddCred(true) : setOpenAddGroup(true)} disabled={!selectedOrgId} sx={{ borderRadius: 3, fontWeight: 700 }}>
-          {activeTab === 0 ? "Add Credential" : "Create Group"}
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          {activeTab === 0 && (
+            <Button variant="outlined" startIcon={<Upload size={16} />} onClick={() => setOpenImportModal(true)} disabled={!selectedOrgId} sx={{ borderRadius: 3, fontWeight: 700 }}>
+              Import Excel
+            </Button>
+          )}
+          <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => activeTab === 0 ? setOpenAddCred(true) : setOpenAddGroup(true)} disabled={!selectedOrgId} sx={{ borderRadius: 3, fontWeight: 700 }}>
+            {activeTab === 0 ? "Add Credential" : "Create Group"}
+          </Button>
+        </Box>
       </Box>
 
       <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
@@ -409,6 +418,16 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
           </>
         ) : null}
       </Dialog>
+
+      {openImportModal && (
+        <ExcelImportModal
+          open={openImportModal}
+          onClose={() => setOpenImportModal(false)}
+          organizationId={selectedOrgId}
+          onSuccess={(msg) => { setOpenImportModal(false); onSuccess(msg); fetchData(selectedOrgId); }}
+          onError={onError}
+        />
+      )}
     </Box>
   );
 }

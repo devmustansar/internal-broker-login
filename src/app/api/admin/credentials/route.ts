@@ -66,36 +66,71 @@ export async function POST(req: NextRequest) {
     if (!isAdminOrAbove(auth)) return forbidden();
 
     const data = await req.json();
-    const { appName, loginUrl, description, username, password, organizationId } = data;
 
-    if (!appName || !username || !password || !organizationId) {
-      return badRequest("Missing required fields: appName, username, password, organizationId");
+    if (Array.isArray(data)) {
+      // Bulk Import
+      const createdCredentials = [];
+      for (const item of data) {
+        const { appName, loginUrl, description, username, password, organizationId } = item;
+        if (!appName || !username || !password || !organizationId) {
+          continue; // Skip invalid rows
+        }
+
+        const encryptedPayload = encryptPayload({ username, password });
+        const credential = await prisma.sharedCredential.create({
+          data: {
+            appName,
+            loginUrl: loginUrl || null,
+            description: description || null,
+            encryptedPayload,
+            organizationId,
+            createdBy: auth.userId,
+          },
+          select: {
+            id: true,
+            appName: true,
+            loginUrl: true,
+            description: true,
+            organizationId: true,
+            createdBy: true,
+            createdAt: true,
+          },
+        });
+        createdCredentials.push(credential);
+      }
+      return NextResponse.json(createdCredentials, { status: 201 });
+    } else {
+      // Single Create
+      const { appName, loginUrl, description, username, password, organizationId } = data;
+
+      if (!appName || !username || !password || !organizationId) {
+        return badRequest("Missing required fields: appName, username, password, organizationId");
+      }
+
+      const encryptedPayload = encryptPayload({ username, password });
+
+      const credential = await prisma.sharedCredential.create({
+        data: {
+          appName,
+          loginUrl: loginUrl || null,
+          description: description || null,
+          encryptedPayload,
+          organizationId,
+          createdBy: auth.userId,
+        },
+        select: {
+          id: true,
+          appName: true,
+          loginUrl: true,
+          description: true,
+          organizationId: true,
+          createdBy: true,
+          createdAt: true,
+        },
+      });
+
+      return NextResponse.json(credential, { status: 201 });
     }
-
-    // Encrypt the sensitive payload
-    const encryptedPayload = encryptPayload({ username, password });
-
-    const credential = await prisma.sharedCredential.create({
-      data: {
-        appName,
-        loginUrl: loginUrl || null,
-        description: description || null,
-        encryptedPayload,
-        organizationId,
-        createdBy: auth.userId,
-      },
-      select: {
-        id: true,
-        appName: true,
-        loginUrl: true,
-        description: true,
-        organizationId: true,
-        createdBy: true,
-        createdAt: true,
-      },
-    });
-
-    return NextResponse.json(credential, { status: 201 });
   } catch (err) {
     return serverError(err);
   }
