@@ -146,9 +146,11 @@ export const awsBrokerService = {
     // Credentials are stored per-resource under aws/resource/{resourceKey}.
     // Fall back to config.brokerCredentialRef for legacy records.
     const derivedSecretRef = `aws/resource/${resourceKey}`;
-    const secretRef = (await secretManager.hasSecret(derivedSecretRef))
-      ? derivedSecretRef
-      : config.brokerCredentialRef;
+    const legacyRef = config.brokerCredentialRef;
+    const secretRef =
+      (await secretManager.hasSecret(derivedSecretRef))
+        ? derivedSecretRef
+        : (legacyRef && (await secretManager.hasSecret(legacyRef)) ? legacyRef : derivedSecretRef);
 
     let brokerCreds;
     try {
