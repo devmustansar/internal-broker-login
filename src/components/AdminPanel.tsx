@@ -14,15 +14,13 @@ import {
   Tab, 
   Select, 
   MenuItem, 
-  FormControl, 
-  InputLabel, 
-  Alert, 
+  FormControl,
+  Alert,
   Divider,
   IconButton,
   Chip,
   alpha,
   useTheme,
-  Fade,
   InputAdornment,
   CircularProgress,
   Table,
@@ -447,7 +445,6 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
 
 function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionProps & { initialData?: any; onCancelEdit?: () => void }) {
   const [loading, setLoading] = useState(false);
-  const theme = useTheme();
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     name: initialData?.name || "",
@@ -934,116 +931,6 @@ function CreateUserForm({ onSuccess, onError }: AdminActionProps) {
   );
 }
 
-function AssignAppForm({ onSuccess, onError }: AdminActionProps) {
-  const [loading, setLoading] = useState(false);
-  const theme = useTheme();
-  const [formData, setFormData] = useState({
-    email: "",
-    resourceKey: "",
-    policyArns: [] as string[],
-  });
-  const [awsResources, setAwsResources] = useState<any[]>([]);
-
-  useEffect(() => {
-    fetch("/api/admin/aws/resources").then(r => r.json()).then(setAwsResources).catch(console.error);
-  }, []);
-
-  const matchedAwsResource = awsResources.find(r => r.resourceKey === formData.resourceKey);
-  const availablePolicies = matchedAwsResource?.availablePolicyArns || [];
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const res = await fetch("/api/admin/users/assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, policyArns: formData.policyArns }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.message || "Failed to assign app");
-      onSuccess(data.message || `Assigned key "${formData.resourceKey}" to "${data.email}" successfully.`);
-      setFormData({ email: "", resourceKey: "", policyArns: [] });
-    } catch (err: any) {
-      onError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Box component="form" onSubmit={handleSubmit}>
-      <Grid container spacing={4}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>TARGET IDENTITY</Typography>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="developer@company.com"
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            required
-          />
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>POLICY ATTACHMENT KEY</Typography>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="e.g. jenkins-ci or *"
-            value={formData.resourceKey}
-            onChange={(e) => setFormData({ ...formData, resourceKey: e.target.value })}
-            required
-            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
-          />
-        </Grid>
-        {matchedAwsResource && availablePolicies.length > 0 && (
-          <Grid size={12}>
-            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>AWS SESSION POLICIES (optional)</Typography>
-            <FormControl fullWidth variant="outlined">
-              <Select
-                multiple
-                displayEmpty
-                value={formData.policyArns}
-                onChange={(e) => setFormData({ ...formData, policyArns: typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value })}
-                renderValue={(selected: string[]) => {
-                  if (selected.length === 0) {
-                    return <em>Select policies to assign</em>;
-                  }
-                  return (
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      {selected.map((value) => (
-                        <Chip key={value} label={value} size="small" sx={{ fontWeight: 600, fontFamily: 'monospace' }} />
-                      ))}
-                    </Box>
-                  );
-                }}
-              >
-                {availablePolicies.map((arn: string) => (
-                  <MenuItem key={arn} value={arn} sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                    {arn}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-        )}
-        <Grid size={12}>
-          <Button
-            fullWidth
-            type="submit"
-            variant="contained"
-            size="large"
-            disabled={loading}
-            sx={{ py: 2, fontWeight: 800 }}
-          >
-            Deploy Global Policy Update
-          </Button>
-        </Grid>
-      </Grid>
-    </Box>
-  );
-}
 function OrganizationsPanel({ onSuccess, onError }: AdminActionProps) {
   const [orgs, setOrgs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -1180,12 +1067,6 @@ function OrganizationsPanel({ onSuccess, onError }: AdminActionProps) {
       fetchMembers(orgId);
       fetchOrgs();
     } catch (err: any) { onError(err.message); setAddState((p) => ({ ...p, [orgId]: { ...p[orgId], saving: false } })); }
-  };
-
-  const orgRoleColor = (role: string) => {
-    if (role === "owner") return "error";
-    if (role === "admin") return "warning";
-    return "default";
   };
 
   return (
@@ -2377,7 +2258,7 @@ export default function AdminPanel() {
                 sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, py: 1, borderRadius: 2 } }}
               >
                 <Tab value="web" label="PROXY SERVICE" sx={{ fontWeight: 800, fontSize: '0.7rem' }} />
-                <Tab value="aws" label="AWS FEDERATION" sx={{ fontWeight: 800, fontSize: '0.7rem' }} />
+                <Tab value="aws" label="AWS CONSOLE" sx={{ fontWeight: 800, fontSize: '0.7rem' }} />
               </Tabs>
             </Box>
 

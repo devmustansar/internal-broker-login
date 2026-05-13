@@ -18,9 +18,8 @@ import {
   useTheme,
   Tooltip,
   Stack,
-  Button as MuiButton
 } from "@mui/material";
-import { Edit2, Shield, Layout, Server, Database, ExternalLink, Globe } from "lucide-react";
+import { Edit2, Server, Globe } from "lucide-react";
 
 export default function AdminResourcesList({
   onEditWeb,
@@ -145,7 +144,7 @@ export default function AdminResourcesList({
       <Box>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
           <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 1.5, letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-            <Server size={16} /> AWS Federation Infrastructure
+            <Server size={16} /> AWS Resources
           </Typography>
           <Chip 
             label={`${awsResources.length} TENANTS`} 

@@ -136,7 +136,7 @@ export default function AwsAppCard({ resource }: AwsCardProps) {
                 sx={{ height: 18, fontSize: '0.6rem', fontWeight: 900, borderRadius: 1.5 }} 
               />
               <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                • AWS FEDERATION
+                • AWS CONSOLE
               </Typography>
             </Stack>
           </Box>
