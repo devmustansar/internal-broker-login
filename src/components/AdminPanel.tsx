@@ -11,14 +11,15 @@ import {
   Grid, 
   Stack, 
   Tabs, 
-  Tab, 
-  Select, 
-  MenuItem, 
+  Tab,
+  Select,
+  MenuItem,
   FormControl,
   Alert,
   Divider,
   IconButton,
   Chip,
+  Switch,
   alpha,
   useTheme,
   InputAdornment,
@@ -1048,6 +1049,20 @@ function OrganizationsPanel({ onSuccess, onError }: AdminActionProps) {
     } catch (err: any) { onError(err.message); }
   };
 
+  const handleToggleAdminView = async (org: any, enabled: boolean) => {
+    try {
+      const res = await fetch("/api/admin/organizations", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: org.id, name: org.name, description: org.description, allowAdminResourceView: enabled }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update organization");
+      setOrgs(prev => prev.map(o => o.id === org.id ? { ...o, allowAdminResourceView: enabled } : o));
+      onSuccess(`Admin resource view ${enabled ? "enabled" : "disabled"} for ${org.name}`);
+    } catch (err: any) { onError(err.message); }
+  };
+
   const handleAddMember = async (orgId: string) => {
     const s = addState[orgId];
     if (!s?.email) return;
@@ -1133,6 +1148,21 @@ function OrganizationsPanel({ onSuccess, onError }: AdminActionProps) {
                     <Stack direction="row" spacing={1.5} alignItems="center">
                       <Chip label={`${(org._count?.resources || 0) + (org._count?.awsResources || 0)} resources`} size="small" sx={{ fontWeight: 700, fontSize: '0.6rem', bgcolor: alpha(theme.palette.primary.main, 0.08), color: 'primary.light' }} />
                       <Chip label={`${org._count?.users || 0} members`} size="small" sx={{ fontWeight: 700, fontSize: '0.6rem', bgcolor: alpha(theme.palette.success.main, 0.08), color: 'success.light' }} />
+                      {isSuperAdminUser && (
+                        <Tooltip title={org.allowAdminResourceView ? "Admins can see all org resources — click to disable" : "Enable: org admins/owners see all resources in this org"}>
+                          <Stack direction="row" spacing={0.5} alignItems="center" onClick={(e) => e.stopPropagation()}>
+                            <Typography variant="caption" sx={{ fontSize: '0.6rem', fontWeight: 700, color: org.allowAdminResourceView ? 'success.main' : 'text.disabled' }}>
+                              ADMIN VIEW
+                            </Typography>
+                            <Switch
+                              size="small"
+                              checked={!!org.allowAdminResourceView}
+                              onChange={(e) => handleToggleAdminView(org, e.target.checked)}
+                              color="success"
+                            />
+                          </Stack>
+                        </Tooltip>
+                      )}
                       {isExpanded ? <ChevronUp size={16} color={theme.palette.text.secondary} /> : <ChevronDown size={16} color={theme.palette.text.secondary} />}
                     </Stack>
                   </Box>

@@ -6,7 +6,7 @@ import {
   badRequest,
   serverError,
 } from "@/lib/api-helpers";
-import { isSuperAdmin, isAdminOrAbove, isOrgAdmin, isOrgOwner } from "@/lib/auth-policy";
+import { isSuperAdmin, isAdminOrAbove, isOrgOwner } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -112,7 +112,14 @@ export async function PUT(req: NextRequest) {
 
     const updated = await prisma.organization.update({
       where: { id: data.id },
-      data: { name: data.name, description: data.description },
+      data: {
+        name: data.name,
+        description: data.description,
+        // Only super_admin may toggle the org-wide resource visibility flag
+        ...(isSuperAdmin(auth) && data.allowAdminResourceView !== undefined
+          ? { allowAdminResourceView: Boolean(data.allowAdminResourceView) }
+          : {}),
+      },
     });
 
     return NextResponse.json(updated);
