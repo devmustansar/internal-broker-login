@@ -2330,6 +2330,8 @@ export default function AdminPanel() {
               <AdminResourcesList
                 onEditWeb={(res) => setEditingWebResource(res)}
                 onEditAws={(res) => setEditingAwsResource(res)}
+                onSuccess={handleSuccess}
+                onError={handleError}
               />
             )}
           </motion.div>

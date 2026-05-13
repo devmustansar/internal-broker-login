@@ -1,38 +1,77 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
-  Box, 
-  Typography, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow, 
-  Paper, 
-  IconButton, 
-  Chip, 
+import {
+  Box,
+  Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  IconButton,
+  Chip,
   Skeleton,
   alpha,
   useTheme,
   Tooltip,
   Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Button,
+  CircularProgress,
 } from "@mui/material";
-import { Edit2, Server, Globe } from "lucide-react";
+import { Edit2, Server, Globe, Trash2 } from "lucide-react";
 
 export default function AdminResourcesList({
   onEditWeb,
   onEditAws,
+  onSuccess,
+  onError,
 }: {
   onEditWeb: (resource: any) => void;
   onEditAws: (resource: any) => void;
+  onSuccess?: (msg: string) => void;
+  onError?: (msg: string) => void;
 }) {
   const [webResources, setWebResources] = useState<any[]>([]);
   const [awsResources, setAwsResources] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<{ id: string; name: string; type: "web" | "aws" } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const theme = useTheme();
+
+  const handleDelete = async () => {
+    if (!confirmTarget) return;
+    setIsDeleting(true);
+    try {
+      const url = confirmTarget.type === "web" ? "/api/admin/apps" : "/api/admin/aws/resources";
+      const res = await fetch(url, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: confirmTarget.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Delete failed");
+      if (confirmTarget.type === "web") {
+        setWebResources((prev) => prev.filter((r) => r.id !== confirmTarget.id));
+      } else {
+        setAwsResources((prev) => prev.filter((r) => r.id !== confirmTarget.id));
+      }
+      onSuccess?.(`"${confirmTarget.name}" deleted successfully`);
+    } catch (err: any) {
+      onError?.(err.message || "Failed to delete resource");
+    } finally {
+      setIsDeleting(false);
+      setConfirmTarget(null);
+    }
+  };
 
   const fetchAll = async () => {
     setIsLoading(true);
@@ -130,6 +169,11 @@ export default function AdminResourcesList({
                             <Edit2 size={16} />
                           </IconButton>
                         </Tooltip>
+                        <Tooltip title="Delete Resource">
+                          <IconButton size="small" onClick={() => setConfirmTarget({ id: res.id, name: res.name, type: "web" })} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
+                            <Trash2 size={16} />
+                          </IconButton>
+                        </Tooltip>
                       </TableCell>
                     </TableRow>
                   ))
@@ -193,6 +237,11 @@ export default function AdminResourcesList({
                             <Edit2 size={16} />
                           </IconButton>
                         </Tooltip>
+                        <Tooltip title="Delete Resource">
+                          <IconButton size="small" onClick={() => setConfirmTarget({ id: res.id, name: res.name, type: "aws" })} sx={{ color: 'text.secondary', '&:hover': { color: 'error.main' } }}>
+                            <Trash2 size={16} />
+                          </IconButton>
+                        </Tooltip>
                       </TableCell>
                     </TableRow>
                   ))
@@ -202,6 +251,28 @@ export default function AdminResourcesList({
           </TableContainer>
         )}
       </Box>
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!confirmTarget} onClose={() => !isDeleting && setConfirmTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: '1rem' }}>Delete Resource</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ fontSize: '0.875rem' }}>
+            Permanently delete <strong>{confirmTarget?.name}</strong>? This will remove all associated sessions, accounts, and user access. This cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setConfirmTarget(null)} disabled={isDeleting} size="small">Cancel</Button>
+          <Button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            color="error"
+            variant="contained"
+            size="small"
+            startIcon={isDeleting ? <CircularProgress size={14} color="inherit" /> : <Trash2 size={14} />}
+          >
+            {isDeleting ? "Deleting…" : "Delete"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

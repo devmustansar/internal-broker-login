@@ -7,7 +7,7 @@ import {
   badRequest,
   serverError,
 } from "@/lib/api-helpers";
-import { isAdminOrAbove, getOrgFilter, canManageOrg } from "@/lib/auth-policy";
+import { isAdminOrAbove, isSuperAdmin, getOrgFilter, canManageOrg, isOrgOwner } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
@@ -126,6 +126,55 @@ export async function PUT(req: NextRequest) {
     });
 
     return NextResponse.json(updated);
+  } catch (err) {
+    return serverError(err);
+  }
+}
+
+/**
+ * DELETE /api/admin/apps
+ * Org owners and super admins can delete a web resource and all its dependencies.
+ * Body: { id: string }
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const auth = await getAuthContext(req);
+    if (!auth) return unauthorized();
+
+    const { id } = await req.json();
+    if (!id) return badRequest("Missing required field: id");
+
+    const existing = await prisma.resource.findUnique({ where: { id } });
+    if (!existing) return badRequest("Resource not found");
+
+    const canDelete = existing.organizationId
+      ? isOrgOwner(auth, existing.organizationId)
+      : isSuperAdmin(auth);
+    if (!canDelete) return forbidden("Only organization owners or super admins can delete resources");
+
+    await prisma.$transaction(async (tx) => {
+      // Null out AuditLog references to broker sessions for this resource
+      const sessions = await tx.brokerSession.findMany({
+        where: { resourceId: id },
+        select: { brokerSessionId: true },
+      });
+      const sessionIds = sessions.map((s) => s.brokerSessionId);
+
+      if (sessionIds.length > 0) {
+        await tx.auditLog.updateMany({
+          where: { brokerSessionId: { in: sessionIds } },
+          data: { brokerSessionId: null },
+        });
+      }
+
+      await tx.brokerSession.deleteMany({ where: { resourceId: id } });
+      await tx.managedAccount.deleteMany({ where: { resourceId: id } });
+      await tx.auditLog.updateMany({ where: { resourceId: id }, data: { resourceId: null } });
+      // UserResourceAccess cascades via schema
+      await tx.resource.delete({ where: { id } });
+    });
+
+    return NextResponse.json({ message: "Resource deleted successfully" });
   } catch (err) {
     return serverError(err);
   }

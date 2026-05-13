@@ -132,6 +132,11 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    const access = await prisma.userResourceAccess.findUnique({
+      where: { userId_awsResourceId: { userId: user!.id, awsResourceId: awsResource.id } },
+    });
+    if (!access) return badRequest(`User does not have access to resource: ${resourceKey}`);
+
     await prisma.userAwsPolicy.upsert({
       where: { userId_awsResourceId: { userId: user!.id, awsResourceId: awsResource.id } },
       update: { policyArns, ...(sessionName !== undefined ? { sessionName: sessionName || null } : {}) },

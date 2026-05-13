@@ -8,7 +8,7 @@ import {
   badRequest,
   serverError,
 } from "@/lib/api-helpers";
-import { isAdminOrAbove, getOrgFilter, canManageOrg } from "@/lib/auth-policy";
+import { isAdminOrAbove, isSuperAdmin, getOrgFilter, canManageOrg, isOrgOwner } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -154,6 +154,40 @@ export async function PUT(req: NextRequest) {
     });
 
     return NextResponse.json(updated);
+  } catch (err) {
+    return serverError(err);
+  }
+}
+
+/**
+ * DELETE /api/admin/aws/resources
+ * Org owners and super admins can delete an AWS resource and all its dependencies.
+ * Body: { id: string }
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const auth = await getAuthContext(req);
+    if (!auth) return unauthorized();
+
+    const { id } = await req.json();
+    if (!id) return badRequest("Missing required field: id");
+
+    const existing = await prisma.awsResource.findUnique({ where: { id } });
+    if (!existing) return badRequest("AWS Resource not found");
+
+    const canDelete = existing.organizationId
+      ? isOrgOwner(auth, existing.organizationId)
+      : isSuperAdmin(auth);
+    if (!canDelete) return forbidden("Only organization owners or super admins can delete resources");
+
+    await prisma.$transaction(async (tx) => {
+      await tx.userAwsPolicy.deleteMany({ where: { awsResourceId: id } });
+      // UserResourceAccess cascades via schema; delete explicitly for clarity
+      await tx.userResourceAccess.deleteMany({ where: { awsResourceId: id } });
+      await tx.awsResource.delete({ where: { id } });
+    });
+
+    return NextResponse.json({ message: "AWS resource deleted successfully" });
   } catch (err) {
     return serverError(err);
   }
