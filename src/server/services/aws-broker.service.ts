@@ -1,9 +1,9 @@
 import { v4 as uuidv4 } from "uuid";
 import { prisma } from "@/lib/prisma";
-import type { AwsResourceConfig, AwsFederationResult, AwsAuditDetails } from "@/types";
+import type { AwsResourceConfig, AwsFederationResult } from "@/types";
 import { auditLogService } from "./audit.service";
 import { awsFederationService, AwsStsError, AwsFederationError, AwsValidationError } from "./aws-federation.service";
-import { secretManager, SecretNotFoundError } from "@/server/secrets/secret-manager";
+import { secretManager } from "@/server/secrets/secret-manager";
 import { appAccessService } from "./app-access.service";
 
 // ─── AWS Broker Service ───────────────────────────────────────────────────────
@@ -143,14 +143,16 @@ export const awsBrokerService = {
     }
 
     // ── Step 4: Load broker IAM credentials from SecretsProvider ─────────────
-    // TODO: When integrating real Vault, secretsProvider will transparently
-    //       switch to HashiCorpVaultSecretsProvider — no changes needed here.
+    // Credentials are stored per-resource under aws/resource/{resourceKey}.
+    // Fall back to config.brokerCredentialRef for legacy records.
+    const derivedSecretRef = `aws/resource/${resourceKey}`;
+    const secretRef = (await secretManager.hasSecret(derivedSecretRef))
+      ? derivedSecretRef
+      : config.brokerCredentialRef;
+
     let brokerCreds;
     try {
-      const secret = await secretManager.getSecret(
-        config.brokerCredentialRef,
-        "aws_iam_credentials"
-      );
+      const secret = await secretManager.getSecret(secretRef, "aws_iam_credentials");
       brokerCreds = secret.payload;
       auditLogService.log({
         action: "aws_secrets_loaded",
@@ -159,7 +161,7 @@ export const awsBrokerService = {
         outcome: "success",
         details: {
           launchId,
-          credentialRef: config.brokerCredentialRef,
+          credentialRef: secretRef,
           // SECURITY: Never log accessKeyId or secretAccessKey
         },
         ipAddress,
@@ -172,14 +174,13 @@ export const awsBrokerService = {
         outcome: "failure",
         details: {
           launchId,
-          credentialRef: config.brokerCredentialRef,
+          credentialRef: secretRef,
           error: err instanceof Error ? err.message : "unknown",
         },
         ipAddress,
       });
       throw new Error(
-        `Failed to load broker credentials for ref '${config.brokerCredentialRef}': ${err instanceof Error ? err.message : "unknown error"
-        }`
+        `Failed to load broker credentials for resource '${resourceKey}': ${err instanceof Error ? err.message : "unknown error"}`
       );
     }
 

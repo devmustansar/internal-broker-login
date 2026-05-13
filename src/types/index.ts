@@ -186,10 +186,10 @@ export interface AwsResourceConfig {
   /** External ID for cross-account role trust policy (optional) */
   externalId?: string;
   /**
-   * Reference key to look up broker credentials in the SecretsProvider.
-   * e.g. "aws/broker/default" or "aws/accounts/123456789012/readonly"
+   * Legacy reference key for broker credentials. Now auto-derived as aws/resource/{resourceKey}.
+   * Kept for backward compatibility with records created before per-resource credential scoping.
    */
-  brokerCredentialRef: string;
+  brokerCredentialRef?: string;
   /**
    * Which STS strategy to use.
    * "assume_role" — preferred; broker IAM user assumes target IAM role.
@@ -262,7 +262,7 @@ export interface AwsAuditDetails {
   destination: string;
   ipAddress?: string;
   userAgent?: string;
-  brokerCredentialRef: string;
+  brokerCredentialRef?: string;
   expiresAt?: string;
   error?: string;
 }

@@ -450,7 +450,6 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
   const theme = useTheme();
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [formData, setFormData] = useState({
-    resourceKey: initialData?.resourceKey || "",
     name: initialData?.name || "",
     awsAccountId: initialData?.awsAccountId || "",
     roleArn: initialData?.roleArn || "",
@@ -459,7 +458,6 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
     issuer: initialData?.issuer || "internal-broker",
     sessionDurationSeconds: initialData?.sessionDurationSeconds || 3600,
     externalId: initialData?.externalId || "",
-    brokerCredentialRef: initialData?.brokerCredentialRef || "aws/broker/default",
     stsStrategy: initialData?.stsStrategy || "assume_role",
     environment: initialData?.environment || "production",
     description: initialData?.description || "",
@@ -476,9 +474,8 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
 
   useEffect(() => {
     const fetchCredentials = async () => {
-      const secretRef = formData.brokerCredentialRef || initialData?.brokerCredentialRef;
-      if (!secretRef || !initialData) return;
-      
+      if (!initialData?.resourceKey) return;
+      const secretRef = `aws/resource/${initialData.resourceKey}`;
       try {
         const res = await fetch(`/api/admin/secrets?secretRef=${encodeURIComponent(secretRef)}&kind=aws_iam_credentials`);
         if (res.ok) {
@@ -508,7 +505,11 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
         .map((p: string) => p.trim())
         .filter((p: string) => p.length > 0);
 
-      const payload = isEdit ? { id: initialData.id, ...formData, availablePolicyArns: policyArnsArray } : { ...formData, availablePolicyArns: policyArnsArray };
+      const { accessKeyId, secretAccessKey, ...resourceFields } = formData;
+      const payload = isEdit
+        ? { id: initialData.id, resourceKey: initialData.resourceKey, ...resourceFields, availablePolicyArns: policyArnsArray }
+        : { ...resourceFields, availablePolicyArns: policyArnsArray };
+
       const res = await fetch("/api/admin/aws/resources", {
         method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -516,23 +517,18 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Failed to ${isEdit ? "update" : "create"} AWS resource`);
-      
-      // Save vaulted credentials if provided
-      if (formData.accessKeyId || formData.secretAccessKey) {
+
+      // Save IAM credentials scoped to this resource
+      if (accessKeyId || secretAccessKey) {
+        const resourceKey = isEdit ? initialData.resourceKey : data.resourceKey;
         await fetch("/api/admin/secrets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            secretRef: formData.brokerCredentialRef,
+            secretRef: `aws/resource/${resourceKey}`,
             kind: "aws_iam_credentials",
-            payload: {
-              accessKeyId: formData.accessKeyId,
-              secretAccessKey: formData.secretAccessKey,
-            },
-            metadata: {
-              resourceKey: formData.resourceKey,
-              label: `${formData.name} IAM Broker`
-            }
+            payload: { accessKeyId, secretAccessKey },
+            metadata: { resourceKey, label: `${formData.name} IAM Credentials` },
           }),
         });
       }
@@ -541,7 +537,6 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
       
       if (!isEdit) {
         setFormData({
-          resourceKey: "",
           name: "",
           awsAccountId: "",
           roleArn: "",
@@ -550,7 +545,6 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
           issuer: "internal-broker",
           sessionDurationSeconds: 3600,
           externalId: "",
-          brokerCredentialRef: "aws/broker/default",
           stsStrategy: "assume_role",
           environment: "production",
           description: "",
@@ -573,20 +567,18 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
   return (
     <Box component="form" onSubmit={handleSubmit}>
       <Grid container spacing={4}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>RESOURCE KEY</Typography>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="e.g. aws-prod-ro"
-            value={formData.resourceKey}
-            onChange={(e) => setFormData({ ...formData, resourceKey: e.target.value })}
-            required
-            InputProps={{ 
-              sx: { fontFamily: 'monospace', '&.Mui-focused fieldset': { borderColor: theme.palette.warning.main } } 
-            }}
-          />
-        </Grid>
+        {initialData?.resourceKey && (
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>RESOURCE KEY</Typography>
+            <TextField
+              fullWidth
+              variant="outlined"
+              value={initialData.resourceKey}
+              disabled
+              InputProps={{ sx: { fontFamily: 'monospace', color: 'text.secondary' } }}
+            />
+          </Grid>
+        )}
         <Grid size={{ xs: 12, md: 6 }}>
           <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>ORGANIZATION</Typography>
           <FormControl fullWidth>
@@ -645,18 +637,6 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
             placeholder="us-east-1"
             value={formData.region}
             onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>VAULT CREDENTIAL REF</Typography>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="aws/broker/default"
-            value={formData.brokerCredentialRef}
-            onChange={(e) => setFormData({ ...formData, brokerCredentialRef: e.target.value })}
-            required
             sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
           />
         </Grid>

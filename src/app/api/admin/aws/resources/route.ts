@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { v4 as uuidv4 } from "uuid";
 import { awsBrokerService } from "@/server/services/aws-broker.service";
 import {
   getAuthContext,
@@ -43,8 +44,8 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    // Required fields
-    const required = ["resourceKey", "name", "awsAccountId", "roleArn", "brokerCredentialRef"] as const;
+    // Required fields (resourceKey is auto-generated — not accepted from client)
+    const required = ["name", "awsAccountId", "roleArn"] as const;
     for (const field of required) {
       if (!body[field] || typeof body[field] !== "string") {
         return badRequest(`Missing or invalid required field: '${field}'`);
@@ -56,18 +57,16 @@ export async function POST(req: NextRequest) {
       return badRequest("roleArn must be a valid IAM role ARN (arn:aws:iam::...)");
     }
 
-    // Validate resourceKey format
-    if (!/^[a-z0-9_-]+$/i.test(body.resourceKey)) {
-      return badRequest("resourceKey must only contain letters, numbers, hyphens, and underscores");
-    }
-
     // Validate org scope
     if (body.organizationId && !canManageOrg(auth, body.organizationId)) {
       return forbidden("You do not have access to this organization");
     }
 
+    // Auto-generate a unique, immutable resource key
+    const resourceKey = uuidv4();
+
     const resource = await awsBrokerService.createAwsResource({
-      resourceKey: body.resourceKey,
+      resourceKey,
       name: body.name,
       description: body.description,
       awsAccountId: body.awsAccountId,
@@ -77,7 +76,7 @@ export async function POST(req: NextRequest) {
       issuer: body.issuer ?? "internal-broker",
       sessionDurationSeconds: Number(body.sessionDurationSeconds ?? 3600),
       externalId: body.externalId,
-      brokerCredentialRef: body.brokerCredentialRef,
+      brokerCredentialRef: `aws/resource/${resourceKey}`,
       stsStrategy: body.stsStrategy ?? "assume_role",
       environment: body.environment ?? "production",
       organizationId: body.organizationId || null,
@@ -106,8 +105,8 @@ export async function PUT(req: NextRequest) {
     if (!isAdminOrAbove(auth)) return forbidden();
 
     const data = await req.json();
-    if (!data.id || !data.resourceKey || !data.name || !data.awsAccountId || !data.roleArn || !data.brokerCredentialRef) {
-      return badRequest("Missing required fields (id, resourceKey, name, awsAccountId, roleArn, brokerCredentialRef)");
+    if (!data.id || !data.name || !data.awsAccountId || !data.roleArn) {
+      return badRequest("Missing required fields (id, name, awsAccountId, roleArn)");
     }
 
     // Verify org scope on existing resource
@@ -136,7 +135,7 @@ export async function PUT(req: NextRequest) {
         issuer: data.issuer,
         sessionDurationSeconds: Number(data.sessionDurationSeconds),
         externalId: data.externalId || null,
-        brokerCredentialRef: data.brokerCredentialRef,
+        brokerCredentialRef: `aws/resource/${existing.resourceKey}`,
         stsStrategy: data.stsStrategy,
         sessionName: data.sessionName?.trim() || null,
         ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
