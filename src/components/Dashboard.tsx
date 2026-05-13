@@ -35,13 +35,12 @@ import {
   Alert
 } from "@mui/material";
 import { 
-  RefreshCw, 
-  LayoutDashboard, 
-  Settings2, 
-  Activity, 
-  Zap, 
-  Info, 
-  ShieldAlert,
+  RefreshCw,
+  LayoutDashboard,
+  Settings2,
+  Activity,
+  Zap,
+  Info,
   ChevronRight,
   Database
 } from "lucide-react";
@@ -180,7 +179,7 @@ export default function Dashboard() {
                     </Box>
                     <Box>
                       <Typography variant="h3" sx={{ fontSize: '1.25rem' }}>Applications Directory</Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500 }}>Select an app to establish a zero-trust session.</Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500 }}>Select an application to get started.</Typography>
                     </Box>
                   </Stack>
 
@@ -294,39 +293,6 @@ export default function Dashboard() {
                 {/* Debug Tools */}
                 <DebugPanel result={lastOpenResult} />
 
-                {/* Network Graph Info */}
-                {(user?.role === "admin" || user?.role === "super_admin") && (
-                  <Paper 
-                    sx={{ 
-                      p: 4, 
-                      borderRadius: 5, 
-                      background: `linear-gradient(180deg, ${alpha(theme.palette.primary.main, 0.05)}, transparent)`,
-                      border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-                      '&:hover': { borderColor: alpha(theme.palette.primary.main, 0.3) },
-                      transition: 'border-color 0.3s'
-                    }}
-                  >
-                    <Typography variant="caption" sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1, fontWeight: 800, color: 'primary.main', letterSpacing: '0.1em' }}>
-                      <ShieldAlert size={14} /> BROKER TOPOLOGY
-                    </Typography>
-
-                    <Stack spacing={1.5}>
-                      {[
-                        "Evaluate user ACL constraints",
-                        "Select managed profile",
-                        "Fetch Keys from Vault",
-                        "POST to Upstream Engine",
-                        "Retrieve handoff OTP",
-                        "Execute secure redirect",
-                      ].map((step, idx) => (
-                        <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', width: 14 }}>{idx + 1}</Typography>
-                          <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>{step}</Typography>
-                        </Box>
-                      ))}
-                    </Stack>
-                  </Paper>
-                )}
               </Stack>
             </Grid>
           </Grid>

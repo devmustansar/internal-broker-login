@@ -16,7 +16,7 @@ import {
   useTheme,
   Container
 } from "@mui/material";
-import { Shield, Sparkles, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function TopBar() {
@@ -38,40 +38,17 @@ export default function TopBar() {
         <Toolbar disableGutters sx={{ height: 72, justifyContent: 'space-between' }}>
           {/* Logo Section */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ 
-              position: 'relative', 
-              width: 44, 
-              height: 44, 
-              borderRadius: 3, 
-              bgcolor: alpha(theme.palette.primary.main, 0.1),
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+            <Box sx={{
+              width: 40,
+              height: 40,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: `0 0 20px ${alpha(theme.palette.primary.main, 0.1)}`
+              flexShrink: 0
             }}>
-              <Shield size={22} color={theme.palette.primary.main} />
+              <img src="/Logo-Emblam.png" alt={APP_NAME} style={{ width: 40, height: 40, objectFit: 'contain' }} />
             </Box>
-            <Box>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>{APP_NAME}</Typography>
-                <Chip 
-                  label="PROMETHEUS" 
-                  size="small" 
-                  icon={<Sparkles size={12} />}
-                  sx={{ 
-                    height: 20, 
-                    fontSize: '0.6rem', 
-                    fontWeight: 900, 
-                    bgcolor: alpha(theme.palette.primary.main, 0.1),
-                    color: 'primary.light',
-                    border: 'none',
-                    '& .MuiChip-icon': { color: 'inherit', ml: 0.5 }
-                  }} 
-                />
-              </Stack>
-              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, display: { xs: 'none', sm: 'block' } }}>Zero-Trust Access Gateway</Typography>
-            </Box>
+            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>{APP_NAME}</Typography>
           </Box>
 
           {/* User Section */}

@@ -1,16 +1,14 @@
 "use client";
 
-import { APP_NAME } from "@/lib/constants";
-import { 
-  Box, 
-  Container, 
-  Typography, 
-  Button, 
-  Paper, 
+import {
+  Box,
+  Container,
+  Typography,
+  Button,
+  Paper,
   alpha,
   useTheme
 } from "@mui/material";
-import { Shield, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import { signIn } from "next-auth/react";
 
@@ -56,34 +54,14 @@ export default function LoginPage() {
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.1, type: 'spring' }}
             >
-              <Box
-                sx={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 4,
-                  mx: 'auto',
-                  mb: 3,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-                  boxShadow: `0 0 40px ${alpha(theme.palette.primary.main, 0.4)}`,
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                }}
-              >
-                <Shield size={32} color="white" />
+              <Box sx={{ mx: 'auto', mb: 3, display: 'flex', justifyContent: 'center' }}>
+                <img
+                  src="/Logo-Inline-White.png"
+                  alt="Logo"
+                  style={{ height: 56, objectFit: 'contain' }}
+                />
               </Box>
             </motion.div>
-            
-            <Typography variant="h1" sx={{ mb: 1 }}>
-              {APP_NAME}
-            </Typography>
-            <Typography 
-              variant="subtitle1" 
-              sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}
-            >
-              Zero-Trust Access Gateway <Sparkles size={16} color={theme.palette.primary.main} />
-            </Typography>
           </Box>
 
           <Paper
