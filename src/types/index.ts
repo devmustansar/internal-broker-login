@@ -291,5 +291,6 @@ export type AuditAction =
   | "aws_signin_token_obtained"
   | "aws_signin_token_failed"
   | "aws_console_redirect_issued"
-  | "aws_entitlement_denied";
+  | "aws_entitlement_denied"
+  | "aws_launch_denied_no_policies";
 

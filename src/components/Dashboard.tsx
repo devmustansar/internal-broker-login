@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useApp } from "@/lib/app-context";
 import type { OpenAppResponse } from "@/types";
 import TopBar from "@/components/layout/TopBar";
@@ -14,35 +14,36 @@ import {
 import AdminPanel from "@/components/AdminPanel";
 import UserCredentialVault from "@/components/UserCredentialVault";
 import { APP_DESCRIPTION, APP_ADMIN_DESCRIPTION } from "@/lib/constants";
-import { 
-  Box, 
-  Container, 
-  Typography, 
-  Grid, 
-  Paper, 
-  Button, 
-  Stack, 
-  Avatar, 
-  Chip, 
+import {
+  Box,
+  Container,
+  Typography,
+  Grid,
+  Paper,
+  Button,
+  Stack,
+  Avatar,
+  Chip,
   Skeleton,
   alpha,
   useTheme,
-  IconButton,
-  ToggleButtonGroup,
-  ToggleButton,
   Divider,
   Fade,
-  Alert
+  Alert,
+  Autocomplete,
+  TextField,
+  InputAdornment,
 } from "@mui/material";
-import { 
+import {
   RefreshCw,
   LayoutDashboard,
   Settings2,
   Activity,
   Zap,
   Info,
-  ChevronRight,
-  Database
+  Database,
+  Search,
+  X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -53,6 +54,19 @@ export default function Dashboard() {
   const [resourceError, setResourceError] = useState<string | null>(null);
   const [modal, setModal] = useState<OpenAppResponse | null>(null);
   const [view, setView] = useState<"apps" | "credentials" | "admin">("apps");
+
+  // Org admin/owner: view resources for a specific user
+  const [orgUsers, setOrgUsers] = useState<any[]>([]);
+  const [viewAsUser, setViewAsUser] = useState<any | null>(null);
+  const [viewAsResources, setViewAsResources] = useState<any[]>([]);
+  const [isLoadingViewAs, setIsLoadingViewAs] = useState(false);
+  const [viewAsError, setViewAsError] = useState<string | null>(null);
+  const [userSearchInput, setUserSearchInput] = useState("");
+
+  const isOrgAdminOrOwner = useMemo(
+    () => Object.values((user?.orgRoles || {}) as Record<string, string>).some((r) => r === "admin" || r === "owner"),
+    [user]
+  );
 
   useEffect(() => {
     const load = async () => {
@@ -69,7 +83,35 @@ export default function Dashboard() {
     load();
   }, []);
 
+  // Load org users for the search autocomplete (admins/owners only)
+  useEffect(() => {
+    if (!isOrgAdminOrOwner && user?.role !== "super_admin") return;
+    fetch("/api/admin/users")
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: any[]) => {
+        // Exclude self
+        setOrgUsers(data.filter((u) => u.id !== user?.id));
+      })
+      .catch(() => {});
+  }, [isOrgAdminOrOwner, user]);
+
+  // Fetch resources when a user is selected
+  useEffect(() => {
+    if (!viewAsUser) { setViewAsResources([]); return; }
+    setIsLoadingViewAs(true);
+    setViewAsError(null);
+    fetch(`/api/admin/users/resources?userId=${viewAsUser.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        setViewAsResources(data.resources || []);
+      })
+      .catch((err) => setViewAsError(err.message || "Failed to load user resources"))
+      .finally(() => setIsLoadingViewAs(false));
+  }, [viewAsUser]);
+
   const activeSessions = sessions.filter((s) => s.status === "active").length;
+  const displayedResources = viewAsUser ? viewAsResources : resources;
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
@@ -172,41 +214,98 @@ export default function Dashboard() {
                   backdropFilter: 'blur(20px)',
                 }}
               >
-                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', gap: 2, mb: 6 }}>
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', gap: 2, mb: (isOrgAdminOrOwner || user?.role === 'super_admin') ? 3 : 6 }}>
                   <Stack direction="row" spacing={2} alignItems="center">
-                    <Box sx={{ width: 48, height: 48, borderRadius: 3, bgcolor: '#18181b', display: 'flex', alignItems: 'center', justifyCenter: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <Box sx={{ width: 48, height: 48, borderRadius: 3, bgcolor: '#18181b', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
                       <Zap size={24} color={theme.palette.primary.main} style={{ margin: 'auto' }} />
                     </Box>
                     <Box>
                       <Typography variant="h3" sx={{ fontSize: '1.25rem' }}>Applications Directory</Typography>
-                      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500 }}>Select an application to get started.</Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500 }}>
+                        {viewAsUser ? `Viewing resources for ${viewAsUser.name}` : "Select an application to get started."}
+                      </Typography>
                     </Box>
                   </Stack>
 
                   <Stack direction="row" spacing={2} alignItems="center">
                     <Typography variant="caption" sx={{ color: 'primary.light', fontWeight: 800, px: 2, py: 0.8, bgcolor: alpha(theme.palette.primary.main, 0.1), borderRadius: 2, border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}` }}>
-                      {resources.length} AVAILABLE
+                      {displayedResources.length} AVAILABLE
                     </Typography>
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      onClick={() => {
-                        setIsLoadingResources(true);
-                        fetchResources().finally(() => setIsLoadingResources(false));
-                      }}
-                      sx={{ borderRadius: 2.5, borderColor: 'rgba(255,255,255,0.1)', color: 'text.secondary' }}
-                      startIcon={<RefreshCw size={14} className={isLoadingResources ? 'animate-spin' : ''} />}
-                    >
-                      Sync
-                    </Button>
+                    {!viewAsUser && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => {
+                          setIsLoadingResources(true);
+                          fetchResources().finally(() => setIsLoadingResources(false));
+                        }}
+                        sx={{ borderRadius: 2.5, borderColor: 'rgba(255,255,255,0.1)', color: 'text.secondary' }}
+                        startIcon={<RefreshCw size={14} className={isLoadingResources ? 'animate-spin' : ''} />}
+                      >
+                        Sync
+                      </Button>
+                    )}
                   </Stack>
                 </Box>
 
-                {resourceError && (
-                  <Alert severity="error" sx={{ mb: 4, borderRadius: 3 }}>{resourceError}</Alert>
+                {/* User search for org admins/owners */}
+                {(isOrgAdminOrOwner || user?.role === 'super_admin') && (
+                  <Box sx={{ mb: 4 }}>
+                    <Autocomplete
+                      options={orgUsers}
+                      value={viewAsUser}
+                      inputValue={userSearchInput}
+                      onInputChange={(_, val) => setUserSearchInput(val)}
+                      onChange={(_, val) => { setViewAsUser(val); setUserSearchInput(""); }}
+                      getOptionLabel={(u) => `${u.name} — ${u.email}`}
+                      isOptionEqualToValue={(a, b) => a.id === b.id}
+                      size="small"
+                      clearOnEscape
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          placeholder="Search a user by name or email to view their resources…"
+                          InputProps={{
+                            ...params.InputProps,
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <Search size={15} color={theme.palette.text.secondary} />
+                              </InputAdornment>
+                            ),
+                          }}
+                          sx={{ '& .MuiInputBase-root': { borderRadius: 3, bgcolor: alpha(theme.palette.background.default, 0.5) }, '& .MuiInputBase-input': { fontSize: '0.85rem' } }}
+                        />
+                      )}
+                      renderOption={(props, u) => (
+                        <li {...props} key={u.id}>
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>{u.name}</Typography>
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>{u.email}</Typography>
+                          </Box>
+                        </li>
+                      )}
+                    />
+                    {viewAsUser && (
+                      <Button
+                        size="small"
+                        startIcon={<X size={13} />}
+                        onClick={() => { setViewAsUser(null); setUserSearchInput(""); }}
+                        sx={{ mt: 1, color: 'text.secondary', fontSize: '0.75rem' }}
+                      >
+                        Clear — show my resources
+                      </Button>
+                    )}
+                  </Box>
                 )}
 
-                {isLoadingResources ? (
+                {(resourceError && !viewAsUser) && (
+                  <Alert severity="error" sx={{ mb: 4, borderRadius: 3 }}>{resourceError}</Alert>
+                )}
+                {viewAsError && (
+                  <Alert severity="error" sx={{ mb: 4, borderRadius: 3 }}>{viewAsError}</Alert>
+                )}
+
+                {(viewAsUser ? isLoadingViewAs : isLoadingResources) ? (
                   <Grid container spacing={3}>
                     {[1, 2, 3, 4].map((i) => (
                       <Grid size={{ xs: 12, md: 6 }} key={i}>
@@ -214,14 +313,16 @@ export default function Dashboard() {
                       </Grid>
                     ))}
                   </Grid>
-                ) : resources.length === 0 ? (
+                ) : displayedResources.length === 0 ? (
                   <Box sx={{ py: 10, textAlign: 'center', border: '2px dashed rgba(255,255,255,0.05)', borderRadius: 4, bgcolor: alpha(theme.palette.background.paper, 0.2) }}>
                     <Info size={40} color={theme.palette.text.secondary} style={{ opacity: 0.3, marginBottom: 16 }} />
-                    <Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600 }}>No applications provisioned for your identity.</Typography>
+                    <Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                      {viewAsUser ? `No applications assigned to ${viewAsUser.name}.` : "No applications provisioned for your identity."}
+                    </Typography>
                   </Box>
                 ) : (
                   <Grid container spacing={3}>
-                    {resources.map((r) => (
+                    {displayedResources.map((r) => (
                       <Grid size={{ xs: 12, md: 6 }} key={r.id}>
                         {"awsAccountId" in r ? (
                           <AwsAppCard resource={r} />

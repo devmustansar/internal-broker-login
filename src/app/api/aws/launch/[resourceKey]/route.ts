@@ -78,6 +78,12 @@ export async function POST(
     ) {
       return NextResponse.json({ error: message }, { status: 403 });
     }
+    if (message.startsWith("NO_POLICIES_ASSIGNED:")) {
+      return NextResponse.json(
+        { error: message.replace("NO_POLICIES_ASSIGNED: ", "") },
+        { status: 403 }
+      );
+    }
 
     return serverError(err);
   }

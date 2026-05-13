@@ -8,7 +8,7 @@ import {
 } from "@/lib/api-helpers";
 import { isAdminOrAbove, isSuperAdmin, getOrgFilter } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
-import { encryptPayload } from "@/server/secrets/encryption";
+import { encryptPayload, decryptPayload } from "@/server/secrets/encryption";
 
 /**
  * GET /api/admin/credentials
@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
         createdBy: true,
         createdAt: true,
         updatedAt: true,
+        encryptedPayload: true,
         groups: {
           include: {
             group: { select: { id: true, name: true } },
@@ -49,7 +50,19 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json(credentials);
+    const result = credentials.map((cred) => {
+      let username: string | null = null;
+      try {
+        const decrypted = decryptPayload<{ username: string }>(cred.encryptedPayload, `credential:${cred.id}`);
+        username = decrypted.username ?? null;
+      } catch {
+        // leave null if decryption fails for any reason
+      }
+      const { encryptedPayload: _, ...rest } = cred;
+      return { ...rest, username };
+    });
+
+    return NextResponse.json(result);
   } catch (err) {
     return serverError(err);
   }

@@ -257,6 +257,7 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
                 <Paper key={cred.id} onClick={() => openManageCred(cred.id)} sx={{ p: 3, borderRadius: 4, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: 'pointer', transition: 'all 0.2s', '&:hover': { borderColor: 'primary.main' } }}>
                   <Box>
                     <Typography variant="subtitle1" sx={{ fontWeight: 800, display: "flex", alignItems: "center", gap: 1 }}><AppWindow size={16} /> {cred.appName}</Typography>
+                    {cred.username && <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace', display: 'block', mt: 0.25 }}>{cred.username}</Typography>}
                     {cred.description && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{cred.description}</Typography>}
                     {cred.loginUrl && <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'primary.main', display: 'block', mt: 0.5 }}>{cred.loginUrl}</Typography>}
                   </Box>

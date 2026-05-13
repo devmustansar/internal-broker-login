@@ -167,7 +167,12 @@ export default function UserCredentialVault() {
                         <Typography variant="subtitle1" sx={{ fontWeight: 800, display: 'flex', alignItems: 'center', gap: 1 }}>
                           <AppWindow size={16} color={theme.palette.primary.main} /> {cred.appName}
                         </Typography>
-                        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
+                        {cred.username && (
+                          <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', display: 'block', mt: 0.25 }}>
+                            {cred.username}
+                          </Typography>
+                        )}
+                        <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.25 }}>
                           {cred.organization?.name}
                         </Typography>
                         {cred.loginUrl && (

@@ -127,6 +127,27 @@ export const awsBrokerService = {
       },
     });
 
+    // If the resource has policies configured, require at least one to be
+    // assigned to the user. Without this gate, missing policy assignments
+    // result in wildcard access (full role permissions / allow-all inline policy).
+    // Super admins bypass this check — they always have full access.
+    const resourceHasPolicies = awsResource.availablePolicyArns.length > 0;
+    const userHasPolicies = userPolicy && userPolicy.policyArns.length > 0;
+
+    if (user.role !== "super_admin" && resourceHasPolicies && !userHasPolicies) {
+      auditLogService.log({
+        action: "aws_launch_denied_no_policies",
+        internalUserId,
+        resourceKey,
+        outcome: "failure",
+        details: { launchId, reason: "no_policies_assigned" },
+        ipAddress,
+      });
+      throw new Error(
+        `NO_POLICIES_ASSIGNED: No policies are assigned to your account for this resource. Contact your administrator.`
+      );
+    }
+
     if (userPolicy && userPolicy.policyArns.length > 0) {
       config.policyArns = userPolicy.policyArns;
       console.log(
