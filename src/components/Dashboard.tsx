@@ -13,6 +13,7 @@ import {
 } from "@/components/SessionPanel";
 import AdminPanel from "@/components/AdminPanel";
 import UserCredentialVault from "@/components/UserCredentialVault";
+import UserTwoFactorVault from "@/components/UserTwoFactorVault";
 import { APP_DESCRIPTION, APP_ADMIN_DESCRIPTION } from "@/lib/constants";
 import {
   Box,
@@ -43,6 +44,7 @@ import {
   Info,
   Database,
   Search,
+  ShieldEllipsis,
   X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -53,7 +55,7 @@ export default function Dashboard() {
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [resourceError, setResourceError] = useState<string | null>(null);
   const [modal, setModal] = useState<OpenAppResponse | null>(null);
-  const [view, setView] = useState<"apps" | "credentials" | "admin">("apps");
+  const [view, setView] = useState<"apps" | "credentials" | "2fa" | "admin">("apps");
 
   // Org admin/owner: view resources for a specific user
   const [orgUsers, setOrgUsers] = useState<any[]>([]);
@@ -139,7 +141,7 @@ export default function Dashboard() {
               Hello, {user?.name?.split(" ")[0]}
             </Typography>
             <Typography variant="subtitle1">
-              {view === "apps" ? APP_DESCRIPTION : view === "credentials" ? "Securely access credentials shared with you." : APP_ADMIN_DESCRIPTION}
+              {view === "apps" ? APP_DESCRIPTION : view === "credentials" ? "Securely access credentials shared with you." : view === "2fa" ? "Authenticator codes assigned to you. Codes refresh automatically." : APP_ADMIN_DESCRIPTION}
             </Typography>
           </Box>
 
@@ -160,6 +162,14 @@ export default function Dashboard() {
                 sx={{ borderRadius: 2.5, px: 2, py: 0.8, color: view === 'credentials' ? 'white' : 'text.secondary' }}
               >
                 Shared Credentials
+              </Button>
+              <Button
+                variant={view === '2fa' ? 'contained' : 'text'}
+                onClick={() => setView('2fa')}
+                startIcon={<ShieldEllipsis size={16} />}
+                sx={{ borderRadius: 2.5, px: 2, py: 0.8, color: view === '2fa' ? 'white' : 'text.secondary' }}
+              >
+                Authenticator Codes
               </Button>
               {(user?.role === "admin" || user?.role === "super_admin" || (Object.values((user?.orgRoles || {}) as Record<string, string>)).some((r) => r === "admin" || r === "owner")) && (
                 <Button 
@@ -199,6 +209,12 @@ export default function Dashboard() {
           <Fade in={true}>
             <Box>
               <UserCredentialVault />
+            </Box>
+          </Fade>
+        ) : view === "2fa" ? (
+          <Fade in={true}>
+            <Box>
+              <UserTwoFactorVault />
             </Box>
           </Fade>
         ) : view === "apps" ? (

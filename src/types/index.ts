@@ -292,5 +292,91 @@ export type AuditAction =
   | "aws_signin_token_failed"
   | "aws_console_redirect_issued"
   | "aws_entitlement_denied"
-  | "aws_launch_denied_no_policies";
+  | "aws_launch_denied_no_policies"
+  // ─── 2FA Vault ──────────────────────────────────────────────────────────────
+  | "2fa_entry_created"
+  | "2fa_entry_updated"
+  | "2fa_entry_disabled"
+  | "2fa_entry_deleted"
+  | "2fa_assigned"
+  | "2fa_unassigned"
+  | "2fa_otp_viewed"
+  | "2fa_otp_copied"
+  | "2fa_unauthorized_access"
+  | "2fa_secret_rotated"
+  | "2fa_qr_parsed";
+
+// ─── 2FA Vault Types ──────────────────────────────────────────────────────────
+
+export interface TwoFactorEntryPublic {
+  id: string;
+  appName: string;
+  issuer: string | null;
+  accountLabel: string | null;
+  algorithm: string;
+  digits: number;
+  period: number;
+  category: string | null;
+  environment: string | null;
+  notes: string | null;
+  allowNotesForUsers: boolean;
+  status: string;
+  organizationId: string;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+  assignmentCount?: number;
+}
+
+export interface TwoFactorAssignmentPublic {
+  id: string;
+  twoFactorEntryId: string;
+  assignedToUserId: string | null;
+  assignedById: string;
+  createdAt: string;
+  user?: { id: string; name: string; email: string };
+}
+
+export interface OtpResponse {
+  otp: string;
+  expiresAt: string;
+  remainingSeconds: number;
+  period: number;
+}
+
+export interface TwoFactorAccessLogPublic {
+  id: string;
+  twoFactorEntryId: string;
+  userId: string | null;
+  action: string;
+  outcome: string;
+  ipAddress: string | null;
+  timestamp: string;
+  details: Record<string, unknown> | null;
+  user?: { id: string; name: string; email: string } | null;
+}
+
+export interface ParsedOtpAuth {
+  secret: string;
+  issuer: string | null;
+  accountLabel: string | null;
+  algorithm: string;
+  digits: number;
+  period: number;
+  rawUri: string;
+}
+
+export interface MigrationEntry {
+  secret: string;
+  issuer: string | null;
+  accountLabel: string | null;
+  algorithm: string;
+  digits: number;
+  period: number;
+  isTotp: boolean;
+}
+
+export type QrParseResult =
+  | { type: "totp"; secret: string; issuer: string | null; accountLabel: string | null; algorithm: string; digits: number; period: number; rawUri: string }
+  | { type: "migration"; entries: MigrationEntry[]; skippedHotp: number };
 

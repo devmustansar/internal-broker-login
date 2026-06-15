@@ -44,14 +44,15 @@ import {
 import { useApp } from "@/lib/app-context";
 import AdminResourcesList from "@/components/AdminResourcesList";
 import CredentialVaultPanel from "@/components/CredentialVaultPanel";
+import TwoFactorVaultPanel from "@/components/TwoFactorVaultPanel";
 import { 
-  ShieldCheck, 
-  Database, 
-  KeyRound, 
-  AlertCircle, 
-  Eye, 
-  Rocket, 
-  Users, 
+  ShieldCheck,
+  Database,
+  KeyRound,
+  AlertCircle,
+  Eye,
+  Rocket,
+  Users,
   Combine,
   Plus,
   Trash2,
@@ -70,6 +71,7 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
+  ShieldEllipsis,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -2239,6 +2241,7 @@ export default function AdminPanel() {
           {isGlobalAdmin && <Tab icon={<ClipboardList size={18} />} iconPosition="start" label="AUDIT LOGS" value={3} />}
           <Tab icon={<Building2 size={18} />} iconPosition="start" label="ORGANIZATIONS" value={4} />
           <Tab icon={<KeyRound size={18} />} iconPosition="start" label="CREDENTIAL VAULT" value={5} />
+          <Tab icon={<ShieldEllipsis size={18} />} iconPosition="start" label="2FA VAULT" value={6} />
         </Tabs>
       </Box>
 
@@ -2375,6 +2378,17 @@ export default function AdminPanel() {
                 <KeyRound size={16} /> Credential Vault
               </Typography>
               <CredentialVaultPanel onSuccess={handleSuccess} onError={handleError} />
+            </Box>
+          </motion.div>
+        )}
+
+        {activeTab === 6 && (
+          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}>
+            <Box>
+              <Typography variant="caption" sx={{ mb: 6, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'primary.main', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase' }}>
+                <ShieldEllipsis size={16} /> 2FA Vault
+              </Typography>
+              <TwoFactorVaultPanel onSuccess={handleSuccess} onError={handleError} />
             </Box>
           </motion.div>
         )}
