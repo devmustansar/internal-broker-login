@@ -23,6 +23,12 @@ model User {
   credentialGroupMemberships CredentialGroupMember[]
   credentialShares           CredentialShare[]
   resourceAccess             UserResourceAccess[]
+  twoFactorEntriesCreated    TwoFactorEntry[]          @relation("TwoFactorCreatedBy")
+  twoFactorEntriesOwned      TwoFactorEntry[]          @relation("TwoFactorOwner")
+  twoFactorAssignmentsTo     TwoFactorAssignment[]     @relation("TwoFactorAssignedToUser")
+  twoFactorAssignmentsBy     TwoFactorAssignment[]     @relation("TwoFactorAssignedBy")
+  twoFactorAccessLogs        TwoFactorAccessLog[]
+  twoFactorSecretVersions    TwoFactorSecretVersion[]
 }
 
 model Resource {
@@ -283,6 +289,8 @@ model Organization {
   awsResources      AwsResource[]
   sharedCredentials SharedCredential[]
   credentialGroups  CredentialGroup[]
+  twoFactorEntries  TwoFactorEntry[]
+  twoFactorAssignments TwoFactorAssignment[]
 }
 
 model UserOrganization {
@@ -379,4 +387,120 @@ model CredentialShare {
   createdAt    DateTime         @default(now())
 
   @@unique([credentialId, userId])
+}
+
+// ─── 2FA Vault ────────────────────────────────────────────────────────────────
+
+model TwoFactorEntry {
+  id               String    @id @default(uuid())
+
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  organizationId   String
+
+  appName          String
+  issuer           String?
+  accountLabel     String?
+
+  /// AES-256-GCM ciphertext — NEVER returned in any API response
+  encryptedSecret  String
+
+  /// "SHA1" | "SHA256" | "SHA512"
+  algorithm        String    @default("SHA1")
+  digits           Int       @default(6)
+  period           Int       @default(30)
+
+  category         String?
+  environment      String?
+  notes            String?
+  allowNotesForUsers Boolean  @default(false)
+
+  /// "active" | "disabled"
+  status           String    @default("active")
+
+  createdBy        User      @relation("TwoFactorCreatedBy", fields: [createdById], references: [id])
+  createdById      String
+  owner            User?     @relation("TwoFactorOwner", fields: [ownerId], references: [id])
+  ownerId          String?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  assignments      TwoFactorAssignment[]
+  accessLogs       TwoFactorAccessLog[]
+  secretVersions   TwoFactorSecretVersion[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([deletedAt])
+  @@index([organizationId, status])
+}
+
+model TwoFactorAssignment {
+  id               String    @id @default(uuid())
+
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  organizationId   String
+
+  entry            TwoFactorEntry @relation(fields: [twoFactorEntryId], references: [id], onDelete: Cascade)
+  twoFactorEntryId String
+
+  assignedToUser   User?     @relation("TwoFactorAssignedToUser", fields: [assignedToUserId], references: [id])
+  assignedToUserId String?
+
+  assignedBy       User      @relation("TwoFactorAssignedBy", fields: [assignedById], references: [id])
+  assignedById     String
+
+  createdAt        DateTime  @default(now())
+
+  @@unique([twoFactorEntryId, assignedToUserId])
+  @@index([organizationId])
+  @@index([twoFactorEntryId])
+  @@index([assignedToUserId])
+}
+
+/// Immutable OTP access log — append-only, never updated or deleted.
+model TwoFactorAccessLog {
+  id               String    @id @default(uuid())
+
+  entry            TwoFactorEntry @relation(fields: [twoFactorEntryId], references: [id])
+  twoFactorEntryId String
+
+  organizationId   String
+
+  user             User?     @relation(fields: [userId], references: [id])
+  userId           String?
+
+  /// "otp_viewed" | "otp_copied" | "unauthorized_access_attempt"
+  action           String
+
+  ipAddress        String?
+  userAgent        String?
+  outcome          String
+  details          Json?
+  timestamp        DateTime  @default(now())
+
+  @@index([twoFactorEntryId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([action])
+  @@index([timestamp])
+}
+
+/// Append-only secret rotation history.
+model TwoFactorSecretVersion {
+  id               String    @id @default(uuid())
+
+  entry            TwoFactorEntry @relation(fields: [twoFactorEntryId], references: [id], onDelete: Cascade)
+  twoFactorEntryId String
+
+  encryptedSecret  String
+  version          Int
+
+  rotatedBy        User      @relation(fields: [rotatedById], references: [id])
+  rotatedById      String
+
+  createdAt        DateTime  @default(now())
+
+  @@index([twoFactorEntryId])
 }

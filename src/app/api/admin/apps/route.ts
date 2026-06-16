@@ -27,6 +27,18 @@ export async function GET(req: NextRequest) {
   }
 }
 
+function generateResourceKey(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 40);
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return slug ? `${slug}-${suffix}` : suffix;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);
@@ -34,8 +46,8 @@ export async function POST(req: NextRequest) {
     if (!isAdminOrAbove(auth)) return forbidden();
 
     const data = await req.json();
-    if (!data.resourceKey || !data.name || !data.appHost) {
-      return badRequest("Missing required fields (resourceKey, name, appHost)");
+    if (!data.name || !data.appHost) {
+      return badRequest("Missing required fields (name, appHost)");
     }
 
     // Validate org scope for non-super-admins
@@ -43,9 +55,11 @@ export async function POST(req: NextRequest) {
       return forbidden("You do not have access to this organization");
     }
 
+    const resourceKey = generateResourceKey(data.name);
+
     // Strip frontend-only fields (managedUsername, managedPassword) before persisting
     const resourceData = {
-      resourceKey: data.resourceKey,
+      resourceKey,
       name: data.name,
       description: data.description,
       appHost: data.appHost,
@@ -67,7 +81,7 @@ export async function POST(req: NextRequest) {
     await brokerSessionService.addManagedAccount({
       resourceId: resource.id,
       accountKey: "default-admin",
-      vaultPath: `secret/apps/${data.resourceKey}/admin`,
+      vaultPath: `secret/apps/${resourceKey}/admin`,
       label: "Default Admin Account",
       role: "admin",
     });
@@ -85,8 +99,8 @@ export async function PUT(req: NextRequest) {
     if (!isAdminOrAbove(auth)) return forbidden();
 
     const data = await req.json();
-    if (!data.id || !data.resourceKey || !data.name || !data.appHost) {
-      return badRequest("Missing required fields (id, resourceKey, name, appHost)");
+    if (!data.id || !data.name || !data.appHost) {
+      return badRequest("Missing required fields (id, name, appHost)");
     }
 
     // Verify the existing resource is in the admin's org scope
@@ -106,7 +120,7 @@ export async function PUT(req: NextRequest) {
     const updated = await prisma.resource.update({
       where: { id: data.id },
       data: {
-        resourceKey: data.resourceKey,
+        // resourceKey is immutable — never updated after creation
         name: data.name,
         description: data.description,
         appHost: data.appHost,

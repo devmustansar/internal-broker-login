@@ -85,7 +85,6 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
   const theme = useTheme();
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [formData, setFormData] = useState({
-    resourceKey: initialData?.resourceKey || "",
     name: initialData?.name || "",
     appHost: initialData?.appHost || "",
     apiHost: initialData?.apiHost || "",
@@ -103,6 +102,10 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
     managedUsername: "",
     managedPassword: "",
   });
+
+  const keyPreview = formData.name
+    ? formData.name.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").replace(/-+/g, "-").slice(0, 40) + "-****"
+    : "";
 
   useEffect(() => {
     fetch("/api/admin/organizations").then(r => r.json()).then(setOrganizations).catch(console.error);
@@ -143,10 +146,11 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Failed to ${isEdit ? "update" : "create"} app`);
-      
+
       // Save vaulted credentials if provided
       if (formData.managedUsername || formData.managedPassword) {
-        const secretRef = data.accounts?.[0]?.vaultPath || `secret/apps/${formData.resourceKey}/admin`;
+        const resourceKey = data.resourceKey;
+        const secretRef = `secret/apps/${resourceKey}/admin`;
         await fetch("/api/admin/secrets", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -158,7 +162,7 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
               password: formData.managedPassword,
             },
             metadata: {
-              resourceKey: formData.resourceKey,
+              resourceKey,
               label: `${formData.name} Admin`
             }
           }),
@@ -166,10 +170,9 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
       }
 
       onSuccess(`App "${data.name}" ${isEdit ? "updated" : "created"} successfully!`);
-      
+
       if (!isEdit) {
         setFormData({
-          resourceKey: "",
           name: "",
           appHost: "",
           apiHost: "",
@@ -201,18 +204,6 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
     <Box component="form" onSubmit={handleSubmit}>
       <Grid container spacing={4}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>RESOURCE KEY</Typography>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="e.g. jenkins-ci"
-            value={formData.resourceKey}
-            onChange={(e) => setFormData({ ...formData, resourceKey: e.target.value })}
-            required
-            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
           <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>APP NAME</Typography>
           <TextField
             fullWidth
@@ -221,6 +212,18 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             required
+          />
+        </Grid>
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>RESOURCE KEY</Typography>
+          <TextField
+            fullWidth
+            variant="outlined"
+            value={initialData ? initialData.resourceKey : keyPreview}
+            disabled
+            placeholder="Auto-generated from app name"
+            helperText={initialData ? "Immutable — set at creation" : "Auto-generated when saved"}
+            InputProps={{ sx: { fontFamily: 'monospace', color: 'text.secondary' } }}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>

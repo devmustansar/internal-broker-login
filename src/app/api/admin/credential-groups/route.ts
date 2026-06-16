@@ -8,6 +8,7 @@ import {
 } from "@/lib/api-helpers";
 import { isAdminOrAbove, isSuperAdmin, getOrgFilter } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
+import { decryptPayload } from "@/server/secrets/encryption";
 
 /**
  * GET /api/admin/credential-groups
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
         credentials: {
           include: {
             credential: {
-              select: { id: true, appName: true, loginUrl: true, description: true },
+              select: { id: true, appName: true, loginUrl: true, description: true, encryptedPayload: true },
             },
           },
         },
@@ -41,7 +42,22 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json(groups);
+    const result = groups.map((group) => ({
+      ...group,
+      credentials: group.credentials.map(({ credential, ...entry }) => {
+        let username: string | null = null;
+        try {
+          const decrypted = decryptPayload<{ username: string }>(credential.encryptedPayload, `credential:${credential.id}`);
+          username = decrypted.username ?? null;
+        } catch {
+          // leave null if decryption fails
+        }
+        const { encryptedPayload: _, ...credRest } = credential;
+        return { ...entry, credential: { ...credRest, username } };
+      }),
+    }));
+
+    return NextResponse.json(result);
   } catch (err) {
     return serverError(err);
   }

@@ -394,7 +394,7 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
                   <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 2, color: 'text.secondary' }}>GROUP CREDENTIALS</Typography>
                   <Stack direction="row" spacing={1} mb={2}>
                     <Autocomplete size="small" fullWidth options={availableGroupCreds}
-                      getOptionLabel={(o) => `${o.appName}${o.loginUrl ? ` — ${o.loginUrl}` : ''}`}
+                      getOptionLabel={(o) => `${o.appName}${o.username ? ` — ${o.username}` : ''}`}
                       filterOptions={(options, { inputValue }) => { const q = inputValue.toLowerCase(); return options.filter(o => o.appName?.toLowerCase().includes(q) || o.loginUrl?.toLowerCase().includes(q)); }}
                       value={groupCredOption} onChange={(_, v) => setGroupCredOption(v)}
                       renderInput={(params) => <TextField {...params} placeholder="Search credential by app name or URL..." />} />
@@ -403,10 +403,23 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
                   <List dense>
                     {manageGroup.credentials.length === 0 && <Typography variant="caption" color="text.secondary">No credentials in this group.</Typography>}
                     {manageGroup.credentials.map((gc: any) => (
-                      <ListItem key={gc.credentialId} sx={{ border: '1px solid rgba(255,255,255,0.1)', borderRadius: 2, mb: 1 }}>
-                        <ListItemText primary={gc.credential.appName} secondary={gc.credential.loginUrl || "No URL"} />
-                        <ListItemSecondaryAction><IconButton size="small" color="error" onClick={() => handleRemoveGroupCred(gc.credentialId)}><X size={16} /></IconButton></ListItemSecondaryAction>
-                      </ListItem>
+                      <Paper key={gc.credentialId} sx={{ p: 3, borderRadius: 4, transition: 'all 0.2s', '&:hover': { borderColor: 'primary.main' }, mb: 1 }}>
+                        {/* Top row: appName + username full width */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, width: '100%' }}>
+                          <Typography variant="subtitle1" sx={{ fontWeight: 800, display: "flex", alignItems: "center", gap: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <AppWindow size={16} style={{ flexShrink: 0 }} /> {gc.credential.appName}
+                          </Typography>
+                          {gc.credential.username && <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace', whiteSpace: 'nowrap', flexShrink: 0 }}>{gc.credential.username}</Typography>}
+                        </Box>
+                        {/* Bottom row: description/url + delete button */}
+                        <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', mt: 0.5 }}>
+                          <Box sx={{ minWidth: 0 }}>
+                            {gc.credential.description && <Typography variant="body2" color="text.secondary">{gc.credential.description}</Typography>}
+                            {gc.credential.loginUrl && <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'primary.main', display: 'block' }}>{gc.credential.loginUrl}</Typography>}
+                          </Box>
+                          <IconButton size="small" color="error" onClick={() => handleRemoveGroupCred(gc.credentialId)} sx={{ flexShrink: 0, ml: 1 }}><X size={16} /></IconButton>
+                        </Box>
+                      </Paper>
                     ))}
                   </List>
                 </Grid>
