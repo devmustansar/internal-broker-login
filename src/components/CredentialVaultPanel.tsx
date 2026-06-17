@@ -5,9 +5,9 @@ import {
   Box, Typography, Button, TextField, Stack, Paper, Chip, Select, MenuItem, FormControl, InputLabel,
   Dialog, DialogTitle, DialogContent, DialogActions, IconButton, CircularProgress, Alert,
   Tabs, Tab, List, ListItem, ListItemText, ListItemSecondaryAction, Grid,
-  Autocomplete, TablePagination, InputAdornment
+  Autocomplete, TablePagination, InputAdornment, Checkbox, Tooltip
 } from "@mui/material";
-import { Plus, X, Lock, Users, AppWindow, Search, Upload } from "lucide-react";
+import { Plus, X, Lock, Users, AppWindow, Search, Upload, Trash2 } from "lucide-react";
 import { useApp } from "@/lib/app-context";
 import ExcelImportModal from "./ExcelImportModal";
 
@@ -17,6 +17,16 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
   const { user } = useApp();
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>("");
+
+  // Role-based delete permission: super_admin, global admin, or org admin/owner
+  const canDelete = (
+    user?.role === 'super_admin' ||
+    user?.role === 'admin' ||
+    !!(selectedOrgId && (
+      user?.orgRoles?.[selectedOrgId] === 'admin' ||
+      user?.orgRoles?.[selectedOrgId] === 'owner'
+    ))
+  );
   const [orgMembers, setOrgMembers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState(0);
 
@@ -41,6 +51,11 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
   const [groupForm, setGroupForm] = useState({ name: "", description: "" });
   const [savingGroup, setSavingGroup] = useState(false);
 
+  // Bulk selection & delete
+  const [selectedCredIds, setSelectedCredIds] = useState<Set<string>>(new Set());
+  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   // Manage states
   const [manageCred, setManageCred] = useState<any>(null);
   const [manageCredLoading, setManageCredLoading] = useState(false);
@@ -59,6 +74,8 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
 
   useEffect(() => { setCredPage(0); }, [credSearch]);
   useEffect(() => { setGroupPage(0); }, [groupSearch]);
+  useEffect(() => { setSelectedCredIds(new Set()); setSelectedGroupIds(new Set()); }, [selectedOrgId]);
+  useEffect(() => { setSelectedCredIds(new Set()); setSelectedGroupIds(new Set()); }, [activeTab]);
 
   const fetchOrgs = async () => {
     try {
@@ -98,6 +115,60 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
 
   const paginatedCreds = filteredCreds.slice(credPage * credRowsPerPage, credPage * credRowsPerPage + credRowsPerPage);
   const paginatedGroups = filteredGroups.slice(groupPage * groupRowsPerPage, groupPage * groupRowsPerPage + groupRowsPerPage);
+
+  // Individual delete from list (without opening manage dialog)
+  const handleDeleteSingleCred = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Delete this credential? This action cannot be undone.")) return;
+    try {
+      const res = await fetch(`/api/admin/credentials/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete credential");
+      onSuccess("Credential deleted.");
+      fetchData(selectedOrgId);
+    } catch (err: any) { onError(err.message); }
+  };
+
+  const handleDeleteSingleGroup = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Delete this group? All member and credential associations will be removed.")) return;
+    try {
+      const res = await fetch(`/api/admin/credential-groups/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete group");
+      onSuccess("Group deleted.");
+      fetchData(selectedOrgId);
+    } catch (err: any) { onError(err.message); }
+  };
+
+  // Bulk delete
+  const handleBulkDeleteCreds = async () => {
+    if (!confirm(`Permanently delete ${selectedCredIds.size} credential(s)? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    try {
+      for (const id of selectedCredIds) {
+        const res = await fetch(`/api/admin/credentials/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error(`Failed to delete credential ${id}`);
+      }
+      onSuccess(`${selectedCredIds.size} credential(s) deleted.`);
+      setSelectedCredIds(new Set());
+      fetchData(selectedOrgId);
+    } catch (err: any) { onError(err.message); }
+    finally { setBulkDeleting(false); }
+  };
+
+  const handleBulkDeleteGroups = async () => {
+    if (!confirm(`Permanently delete ${selectedGroupIds.size} group(s)? All member and credential associations will be removed.`)) return;
+    setBulkDeleting(true);
+    try {
+      for (const id of selectedGroupIds) {
+        const res = await fetch(`/api/admin/credential-groups/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error(`Failed to delete group ${id}`);
+      }
+      onSuccess(`${selectedGroupIds.size} group(s) deleted.`);
+      setSelectedGroupIds(new Set());
+      fetchData(selectedOrgId);
+    } catch (err: any) { onError(err.message); }
+    finally { setBulkDeleting(false); }
+  };
 
   // CRUD handlers
   const handleCreateCredential = async () => {
@@ -222,7 +293,19 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
             {organizations.map((org) => (<MenuItem key={org.id} value={org.id}>{org.name}</MenuItem>))}
           </Select>
         </FormControl>
-        <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+          {canDelete && activeTab === 0 && selectedCredIds.size > 0 && (
+            <Button variant="contained" color="error" startIcon={bulkDeleting ? <CircularProgress size={16} color="inherit" /> : <Trash2 size={16} />}
+              onClick={handleBulkDeleteCreds} disabled={bulkDeleting} sx={{ borderRadius: 3, fontWeight: 700 }}>
+              Delete Selected ({selectedCredIds.size})
+            </Button>
+          )}
+          {canDelete && activeTab === 1 && selectedGroupIds.size > 0 && (
+            <Button variant="contained" color="error" startIcon={bulkDeleting ? <CircularProgress size={16} color="inherit" /> : <Trash2 size={16} />}
+              onClick={handleBulkDeleteGroups} disabled={bulkDeleting} sx={{ borderRadius: 3, fontWeight: 700 }}>
+              Delete Selected ({selectedGroupIds.size})
+            </Button>
+          )}
           {activeTab === 0 && (
             <Button variant="outlined" startIcon={<Upload size={16} />} onClick={() => setOpenImportModal(true)} disabled={!selectedOrgId} sx={{ borderRadius: 3, fontWeight: 700 }}>
               Import Excel
@@ -254,14 +337,39 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
           <>
             <Stack spacing={2}>
               {paginatedCreds.map((cred) => (
-                <Paper key={cred.id} onClick={() => openManageCred(cred.id)} sx={{ p: 3, borderRadius: 4, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: 'pointer', transition: 'all 0.2s', '&:hover': { borderColor: 'primary.main' } }}>
-                  <Box>
+                <Paper key={cred.id} sx={{ p: 3, borderRadius: 4, display: "flex", alignItems: "center", gap: 1, transition: 'all 0.2s', '&:hover': { borderColor: 'primary.main' } }}>
+                  {canDelete && (
+                    <Checkbox
+                      size="small"
+                      checked={selectedCredIds.has(cred.id)}
+                      onChange={(e) => {
+                        setSelectedCredIds(prev => {
+                          const next = new Set(prev);
+                          e.target.checked ? next.add(cred.id) : next.delete(cred.id);
+                          return next;
+                        });
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      sx={{ flexShrink: 0 }}
+                    />
+                  )}
+                  <Box flex={1} sx={{ cursor: 'pointer', minWidth: 0 }} onClick={() => openManageCred(cred.id)}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 800, display: "flex", alignItems: "center", gap: 1 }}><AppWindow size={16} /> {cred.appName}</Typography>
                     {cred.username && <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace', display: 'block', mt: 0.25 }}>{cred.username}</Typography>}
                     {cred.description && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{cred.description}</Typography>}
                     {cred.loginUrl && <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'primary.main', display: 'block', mt: 0.5 }}>{cred.loginUrl}</Typography>}
                   </Box>
-                  <Chip icon={<Lock size={14} />} label="Encrypted" size="small" color="success" variant="outlined" />
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+                    <Chip icon={<Lock size={14} />} label="Encrypted" size="small" color="success" variant="outlined" />
+                    {canDelete && (
+                      <Tooltip title="Delete credential">
+                        <IconButton size="small" color="error" onClick={(e) => handleDeleteSingleCred(cred.id, e)}
+                          sx={{ bgcolor: 'rgba(239,68,68,0.08)', '&:hover': { bgcolor: 'rgba(239,68,68,0.18)' } }}>
+                          <Trash2 size={14} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Stack>
                 </Paper>
               ))}
             </Stack>
@@ -275,12 +383,38 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
           <>
             <Stack spacing={2}>
               {paginatedGroups.map((group) => (
-                <Paper key={group.id} onClick={() => openManageGroup(group)} sx={{ p: 3, borderRadius: 4, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: 'pointer', transition: 'all 0.2s', '&:hover': { borderColor: 'primary.main' } }}>
-                  <Box>
+                <Paper key={group.id} sx={{ p: 3, borderRadius: 4, display: "flex", alignItems: "center", gap: 1, transition: 'all 0.2s', '&:hover': { borderColor: 'primary.main' } }}>
+                  {canDelete && (
+                    <Checkbox
+                      size="small"
+                      checked={selectedGroupIds.has(group.id)}
+                      onChange={(e) => {
+                        setSelectedGroupIds(prev => {
+                          const next = new Set(prev);
+                          e.target.checked ? next.add(group.id) : next.delete(group.id);
+                          return next;
+                        });
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      sx={{ flexShrink: 0 }}
+                    />
+                  )}
+                  <Box flex={1} sx={{ cursor: 'pointer', minWidth: 0 }} onClick={() => openManageGroup(group)}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 800, display: "flex", alignItems: "center", gap: 1 }}><Users size={16} /> {group.name}</Typography>
                     {group.description && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{group.description}</Typography>}
                   </Box>
-                  <Stack direction="row" spacing={1}><Chip label={`${group.members.length} Members`} size="small" /><Chip label={`${group.credentials.length} Credentials`} size="small" /></Stack>
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
+                    <Chip label={`${group.members.length} Members`} size="small" />
+                    <Chip label={`${group.credentials.length} Credentials`} size="small" />
+                    {canDelete && (
+                      <Tooltip title="Delete group">
+                        <IconButton size="small" color="error" onClick={(e) => handleDeleteSingleGroup(group.id, e)}
+                          sx={{ bgcolor: 'rgba(239,68,68,0.08)', '&:hover': { bgcolor: 'rgba(239,68,68,0.18)' } }}>
+                          <Trash2 size={14} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </Stack>
                 </Paper>
               ))}
             </Stack>
@@ -296,7 +430,7 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
           <Stack spacing={3}>
             <Alert severity="warning" sx={{ borderRadius: 2 }}>Credentials are encrypted via AES-256-GCM.</Alert>
             <TextField fullWidth label="App Name" required value={credForm.appName} onChange={(e) => setCredForm(p => ({ ...p, appName: e.target.value }))} />
-            <TextField fullWidth label="Login URL" placeholder="https://..." value={credForm.loginUrl} onChange={(e) => setCredForm(p => ({ ...p, loginUrl: e.target.value }))} />
+            <TextField fullWidth label="Login URL (optional)" placeholder="https://..." value={credForm.loginUrl} onChange={(e) => setCredForm(p => ({ ...p, loginUrl: e.target.value }))} />
             <TextField fullWidth label="Username / Identifier" required value={credForm.username} onChange={(e) => setCredForm(p => ({ ...p, username: e.target.value }))} />
             <TextField fullWidth label="Password / Secret" type="password" required value={credForm.password} onChange={(e) => setCredForm(p => ({ ...p, password: e.target.value }))} />
             <TextField fullWidth label="Description (Optional)" multiline rows={2} value={credForm.description} onChange={(e) => setCredForm(p => ({ ...p, description: e.target.value }))} />

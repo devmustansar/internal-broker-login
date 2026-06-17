@@ -72,6 +72,7 @@ import {
   ChevronUp,
   Search,
   ShieldEllipsis,
+  Copy,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -84,6 +85,8 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
   const [loading, setLoading] = useState(false);
   const theme = useTheme();
   const [organizations, setOrganizations] = useState<any[]>([]);
+  const [existingApps, setExistingApps] = useState<any[]>([]);
+  const [copySourceKey, setCopySourceKey] = useState<string>("");
   const [formData, setFormData] = useState({
     name: initialData?.name || "",
     appHost: initialData?.appHost || "",
@@ -110,6 +113,36 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
   useEffect(() => {
     fetch("/api/admin/organizations").then(r => r.json()).then(setOrganizations).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (!initialData) {
+      fetch("/api/admin/apps").then(r => r.json()).then(setExistingApps).catch(console.error);
+    }
+  }, [initialData]);
+
+  const handleCopyFromApp = (resourceKey: string) => {
+    const resource = existingApps.find(a => a.resourceKey === resourceKey);
+    if (!resource) { setCopySourceKey(""); return; }
+    setCopySourceKey(resourceKey);
+    setFormData(prev => ({
+      ...prev,
+      name: resource.name || "",
+      appHost: resource.appHost || "",
+      apiHost: resource.apiHost || "",
+      loginUrl: resource.loginUrl || "",
+      loginAdapter: resource.loginAdapter || "json_login",
+      tokenExtractionPath: resource.tokenExtractionPath || "",
+      tokenValidationPath: resource.tokenValidationPath || "",
+      magicLinkExtractionPath: resource.magicLinkExtractionPath || "",
+      loginPayloadTemplate: resource.loginPayloadTemplate || "",
+      usernameField: resource.usernameField || "",
+      passwordField: resource.passwordField || "",
+      environment: resource.environment || "production",
+      description: resource.description || "",
+      organizationId: resource.organizationId || prev.organizationId,
+      // managedUsername and managedPassword intentionally excluded
+    }));
+  };
 
   useEffect(() => {
     const fetchCredentials = async () => {
@@ -200,9 +233,38 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
     }
   };
 
+  const appCopyOptions = formData.organizationId
+    ? existingApps.filter(a => a.organizationId === formData.organizationId)
+    : existingApps;
+
   return (
     <Box component="form" onSubmit={handleSubmit}>
       <Grid container spacing={4}>
+        {!initialData && existingApps.length > 0 && (
+          <Grid size={12}>
+            <Box sx={{ p: 3, borderRadius: 3, border: `1px dashed ${alpha(theme.palette.primary.main, 0.35)}`, bgcolor: alpha(theme.palette.primary.main, 0.03), mb: 1 }}>
+              <Typography variant="caption" sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1, fontWeight: 800, color: 'primary.main', letterSpacing: '0.08em' }}>
+                <Copy size={13} /> COPY CONFIGURATION FROM EXISTING RESOURCE
+              </Typography>
+              <FormControl fullWidth size="small">
+                <Select value={copySourceKey} onChange={(e) => handleCopyFromApp(e.target.value)} displayEmpty>
+                  <MenuItem value=""><em>Select a resource to copy from{formData.organizationId ? " (filtered to selected org)" : ""}…</em></MenuItem>
+                  {appCopyOptions.map((a: any) => (
+                    <MenuItem key={a.resourceKey} value={a.resourceKey}>
+                      {a.name}
+                      <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.secondary', fontFamily: 'monospace' }}>({a.resourceKey})</Typography>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {copySourceKey && (
+                <Typography variant="caption" sx={{ mt: 1, display: 'block', color: 'text.secondary' }}>
+                  Configuration copied — broker credentials are excluded and must be filled in separately below.
+                </Typography>
+              )}
+            </Box>
+          </Grid>
+        )}
         <Grid size={{ xs: 12, md: 6 }}>
           <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>APP NAME</Typography>
           <TextField
@@ -451,7 +513,10 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
 
 function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionProps & { initialData?: any; onCancelEdit?: () => void }) {
   const [loading, setLoading] = useState(false);
+  const theme = useTheme();
   const [organizations, setOrganizations] = useState<any[]>([]);
+  const [existingAwsResources, setExistingAwsResources] = useState<any[]>([]);
+  const [copySourceKey, setCopySourceKey] = useState<string>("");
   const [formData, setFormData] = useState({
     name: initialData?.name || "",
     awsAccountId: initialData?.awsAccountId || "",
@@ -474,6 +539,36 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
   useEffect(() => {
     fetch("/api/admin/organizations").then(r => r.json()).then(setOrganizations).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    if (!initialData) {
+      fetch("/api/admin/aws/resources").then(r => r.json()).then(setExistingAwsResources).catch(console.error);
+    }
+  }, [initialData]);
+
+  const handleCopyFromAws = (resourceKey: string) => {
+    const resource = existingAwsResources.find(r => r.resourceKey === resourceKey);
+    if (!resource) { setCopySourceKey(""); return; }
+    setCopySourceKey(resourceKey);
+    setFormData(prev => ({
+      ...prev,
+      name: resource.name || "",
+      awsAccountId: resource.awsAccountId || "",
+      roleArn: resource.roleArn || "",
+      region: resource.region || "us-east-1",
+      destination: resource.destination || "https://console.aws.amazon.com/",
+      issuer: resource.issuer || "internal-broker",
+      sessionDurationSeconds: resource.sessionDurationSeconds || 3600,
+      externalId: resource.externalId || "",
+      stsStrategy: resource.stsStrategy || "assume_role",
+      environment: resource.environment || "production",
+      description: resource.description || "",
+      organizationId: resource.organizationId || prev.organizationId,
+      availablePolicyArns: (resource.availablePolicyArns || []).join('\n'),
+      sessionName: resource.sessionName || "",
+      // accessKeyId and secretAccessKey intentionally excluded
+    }));
+  };
 
   useEffect(() => {
     const fetchCredentials = async () => {
@@ -567,9 +662,38 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
     }
   };
 
+  const awsCopyOptions = formData.organizationId
+    ? existingAwsResources.filter((r: any) => r.organizationId === formData.organizationId)
+    : existingAwsResources;
+
   return (
     <Box component="form" onSubmit={handleSubmit}>
       <Grid container spacing={4}>
+        {!initialData && existingAwsResources.length > 0 && (
+          <Grid size={12}>
+            <Box sx={{ p: 3, borderRadius: 3, border: `1px dashed ${alpha(theme.palette.warning.main, 0.35)}`, bgcolor: alpha(theme.palette.warning.main, 0.03), mb: 1 }}>
+              <Typography variant="caption" sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1, fontWeight: 800, color: 'warning.main', letterSpacing: '0.08em' }}>
+                <Copy size={13} /> COPY CONFIGURATION FROM EXISTING AWS RESOURCE
+              </Typography>
+              <FormControl fullWidth size="small">
+                <Select value={copySourceKey} onChange={(e) => handleCopyFromAws(e.target.value)} displayEmpty>
+                  <MenuItem value=""><em>Select an AWS resource to copy from{formData.organizationId ? " (filtered to selected org)" : ""}…</em></MenuItem>
+                  {awsCopyOptions.map((r: any) => (
+                    <MenuItem key={r.resourceKey} value={r.resourceKey}>
+                      {r.name}
+                      <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.secondary', fontFamily: 'monospace' }}>({r.awsAccountId})</Typography>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {copySourceKey && (
+                <Typography variant="caption" sx={{ mt: 1, display: 'block', color: 'text.secondary' }}>
+                  Configuration copied — IAM broker credentials are excluded and must be filled in separately below.
+                </Typography>
+              )}
+            </Box>
+          </Grid>
+        )}
         {initialData?.resourceKey && (
           <Grid size={{ xs: 12, md: 6 }}>
             <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>RESOURCE KEY</Typography>

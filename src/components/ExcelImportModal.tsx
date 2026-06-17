@@ -37,8 +37,8 @@ const REQUIRED_FIELDS = [
   { key: "appName", label: "App Name", required: true },
   { key: "username", label: "Username", required: true },
   { key: "password", label: "Password", required: true },
-  { key: "loginUrl", label: "Login URL", required: false },
-  { key: "description", label: "Description", required: false },
+  { key: "loginUrl", label: "Login URL (optional)", required: false },
+  { key: "description", label: "Description (optional)", required: false },
 ];
 
 export default function ExcelImportModal({
