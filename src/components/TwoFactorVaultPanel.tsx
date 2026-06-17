@@ -22,6 +22,7 @@ const EMPTY_FORM = {
   appName: "", issuer: "", accountLabel: "", secret: "", algorithm: "SHA1",
   digits: "6", period: "30", category: "", environment: "production",
   notes: "", allowNotesForUsers: false, status: "active",
+  resourceId: "", awsResourceId: "", credentialId: "",
 };
 
 export default function TwoFactorVaultPanel({
@@ -38,6 +39,11 @@ export default function TwoFactorVaultPanel({
   const [entries, setEntries] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+
+  // For association dropdowns
+  const [orgResources, setOrgResources] = useState<any[]>([]);
+  const [orgAwsResources, setOrgAwsResources] = useState<any[]>([]);
+  const [orgCredentials, setOrgCredentials] = useState<any[]>([]);
 
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("");
@@ -68,6 +74,11 @@ export default function TwoFactorVaultPanel({
   const [assigning, setAssigning] = useState(false);
   const [bulkSelectAll, setBulkSelectAll] = useState(false);
 
+  // Linked To tab state
+  const [assocType, setAssocType] = useState<"resource" | "aws" | "credential">("resource");
+  const [assocTarget, setAssocTarget] = useState<any>(null);
+  const [associating, setAssociating] = useState(false);
+
   // Rotate secret dialog
   const [openRotate, setOpenRotate] = useState(false);
   const [rotateSecret, setRotateSecret] = useState("");
@@ -88,7 +99,7 @@ export default function TwoFactorVaultPanel({
     if (!selectedOrgId && organizations.length > 0) setSelectedOrgId(organizations[0].id);
   }, [organizations]);
   useEffect(() => {
-    if (selectedOrgId) { fetchEntries(); fetchOrgMembers(); }
+    if (selectedOrgId) { fetchEntries(); fetchOrgMembers(); fetchOrgAssociables(); }
     setPage(0);
   }, [selectedOrgId, search, filterCategory, filterEnv, filterStatus, rowsPerPage]);
   useEffect(() => { if (selectedOrgId) fetchEntries(); }, [page]);
@@ -105,6 +116,20 @@ export default function TwoFactorVaultPanel({
     try {
       const res = await fetch(`/api/admin/organizations/members?organizationId=${selectedOrgId}`);
       if (res.ok) setOrgMembers(await res.json());
+    } catch { /**/ }
+  };
+
+  const fetchOrgAssociables = async () => {
+    if (!selectedOrgId) return;
+    try {
+      const [webRes, awsRes, credRes] = await Promise.all([
+        fetch(`/api/admin/apps?organizationId=${selectedOrgId}`),
+        fetch(`/api/admin/aws/resources?organizationId=${selectedOrgId}`),
+        fetch(`/api/admin/credentials?organizationId=${selectedOrgId}`),
+      ]);
+      if (webRes.ok) setOrgResources(await webRes.json());
+      if (awsRes.ok) setOrgAwsResources(await awsRes.json());
+      if (credRes.ok) setOrgCredentials(await credRes.json());
     } catch { /**/ }
   };
 
@@ -154,6 +179,11 @@ export default function TwoFactorVaultPanel({
     if (v === 2 && manageEntry) loadAccessLogs(manageEntry.id);
   };
 
+  useEffect(() => {
+    setAssocType("resource");
+    setAssocTarget(null);
+  }, [manageEntry?.id]);
+
   const openAdd = () => {
     setEditEntry(null);
     setForm({ ...EMPTY_FORM });
@@ -170,6 +200,8 @@ export default function TwoFactorVaultPanel({
       period: String(entry.period), category: entry.category ?? "",
       environment: entry.environment ?? "production", notes: entry.notes ?? "",
       allowNotesForUsers: entry.allowNotesForUsers, status: entry.status,
+      resourceId: entry.resourceId ?? "", awsResourceId: entry.awsResourceId ?? "",
+      credentialId: entry.credentialId ?? "",
     });
     setInputMode("manual");
     setShowSecret(false);
@@ -262,6 +294,9 @@ export default function TwoFactorVaultPanel({
         notes: form.notes || null,
         allowNotesForUsers: form.allowNotesForUsers,
         status: form.status,
+        resourceId: form.resourceId || null,
+        awsResourceId: form.awsResourceId || null,
+        credentialId: form.credentialId || null,
       };
       if (editEntry) {
         const res = await fetch(`/api/admin/2fa/${editEntry.id}`, {
@@ -347,6 +382,43 @@ export default function TwoFactorVaultPanel({
       });
       if (!res.ok) throw new Error("Failed to remove assignment");
       onSuccess("Assignment removed.");
+      openManage(manageEntry.id);
+    } catch (e: any) { onError(e.message); }
+  };
+
+  const handleAssociate = async () => {
+    if (!assocTarget || !manageEntry) return;
+    setAssociating(true);
+    try {
+      const body =
+        assocType === "resource"
+          ? { resourceId: assocTarget.id, awsResourceId: null, credentialId: null }
+          : assocType === "aws"
+          ? { resourceId: null, awsResourceId: assocTarget.id, credentialId: null }
+          : { resourceId: null, awsResourceId: null, credentialId: assocTarget.id };
+      const res = await fetch(`/api/admin/2fa/${manageEntry.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Failed to save association");
+      onSuccess("Association saved.");
+      setAssocTarget(null);
+      openManage(manageEntry.id);
+    } catch (e: any) { onError(e.message); }
+    finally { setAssociating(false); }
+  };
+
+  const handleUnlink = async () => {
+    if (!manageEntry) return;
+    try {
+      const res = await fetch(`/api/admin/2fa/${manageEntry.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resourceId: null, awsResourceId: null, credentialId: null }),
+      });
+      if (!res.ok) throw new Error("Failed to remove link");
+      onSuccess("Association removed.");
       openManage(manageEntry.id);
     } catch (e: any) { onError(e.message); }
   };
@@ -630,6 +702,33 @@ export default function TwoFactorVaultPanel({
             <TextField fullWidth multiline rows={2} label="Notes (optional)" value={form.notes}
               onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} />
 
+            <Divider />
+            <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>ASSOCIATE WITH (OPTIONAL)</Typography>
+            <FormControl fullWidth size="small">
+              <InputLabel>Web Resource</InputLabel>
+              <Select label="Web Resource" value={form.resourceId}
+                onChange={(e) => setForm((p) => ({ ...p, resourceId: e.target.value, awsResourceId: "", credentialId: "" }))}>
+                <MenuItem value=""><em>None</em></MenuItem>
+                {orgResources.map((r: any) => <MenuItem key={r.id} value={r.id}>{r.name} ({r.environment})</MenuItem>)}
+              </Select>
+            </FormControl>
+            <FormControl fullWidth size="small">
+              <InputLabel>AWS Resource</InputLabel>
+              <Select label="AWS Resource" value={form.awsResourceId}
+                onChange={(e) => setForm((p) => ({ ...p, awsResourceId: e.target.value, resourceId: "", credentialId: "" }))}>
+                <MenuItem value=""><em>None</em></MenuItem>
+                {orgAwsResources.map((r: any) => <MenuItem key={r.id} value={r.id}>{r.name} ({r.environment})</MenuItem>)}
+              </Select>
+            </FormControl>
+            <FormControl fullWidth size="small">
+              <InputLabel>Credential</InputLabel>
+              <Select label="Credential" value={form.credentialId}
+                onChange={(e) => setForm((p) => ({ ...p, credentialId: e.target.value, resourceId: "", awsResourceId: "" }))}>
+                <MenuItem value=""><em>None</em></MenuItem>
+                {orgCredentials.map((c: any) => <MenuItem key={c.id} value={c.id}>{c.appName}{c.username ? ` — ${c.username}` : ""}</MenuItem>)}
+              </Select>
+            </FormControl>
+
             <FormControlLabel control={
               <Switch checked={form.allowNotesForUsers} onChange={(e) => setForm((p) => ({ ...p, allowNotesForUsers: e.target.checked }))} />
             } label="Show notes to assigned users" />
@@ -669,6 +768,13 @@ export default function TwoFactorVaultPanel({
               <Tab label="Details" />
               <Tab label={`Assignments (${manageEntry.assignments?.length ?? 0})`} icon={<Users size={14} />} iconPosition="start" />
               <Tab label="Access Log" icon={<ClipboardList size={14} />} iconPosition="start" />
+              <Tab
+                label="Linked To"
+                icon={<Link2 size={14} />}
+                iconPosition="start"
+                sx={{ ...(manageEntry.resourceId || manageEntry.awsResourceId || manageEntry.credentialId
+                  ? { color: "primary.main", fontWeight: 700 } : {}) }}
+              />
             </Tabs>
             <Divider />
             <DialogContent>
@@ -711,6 +817,22 @@ export default function TwoFactorVaultPanel({
                     <Grid size={{ xs: 12 }}>
                       <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>NOTES</Typography>
                       <Typography variant="body2">{manageEntry.notes}</Typography>
+                    </Grid>
+                  )}
+                  {(manageEntry.resourceId || manageEntry.awsResourceId || manageEntry.credentialId) && (
+                    <Grid size={{ xs: 12 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>ASSOCIATED WITH</Typography>
+                      <Stack direction="row" spacing={1} sx={{ mt: 0.5 }} flexWrap="wrap">
+                        {manageEntry.resourceId && (
+                          <Chip label={`Web: ${manageEntry.resourceName ?? manageEntry.resourceId}`} size="small" color="primary" variant="outlined" icon={<Link2 size={12} />} />
+                        )}
+                        {manageEntry.awsResourceId && (
+                          <Chip label={`AWS: ${manageEntry.awsResourceName ?? manageEntry.awsResourceId}`} size="small" color="warning" variant="outlined" icon={<Link2 size={12} />} />
+                        )}
+                        {manageEntry.credentialId && (
+                          <Chip label={`Cred: ${manageEntry.credentialAppName ?? manageEntry.credentialId}`} size="small" color="info" variant="outlined" icon={<KeyRound size={12} />} />
+                        )}
+                      </Stack>
                     </Grid>
                   )}
                   <Grid size={{ xs: 12 }}>
@@ -796,6 +918,232 @@ export default function TwoFactorVaultPanel({
                         </ListItem>
                       ))}
                     </List>
+                  )}
+                </Box>
+              )}
+              {/* Linked To Tab */}
+              {manageTab === 3 && (
+                <Box>
+                  {/* Current association */}
+                  {!manageEntry.resourceId && !manageEntry.awsResourceId && !manageEntry.credentialId ? (
+                    <Alert severity="info" sx={{ borderRadius: 3, mb: 3 }}>
+                      This 2FA entry is not linked to any resource or credential yet. Use the form below to associate it.
+                    </Alert>
+                  ) : (
+                    <Box sx={{ mb: 3 }}>
+                      <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary", display: "block", mb: 1 }}>
+                        CURRENT ASSOCIATION
+                      </Typography>
+                      {manageEntry.resourceId && (
+                        <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                            <Chip label="WEB APP" size="small" color="primary" sx={{ fontSize: "0.6rem", fontWeight: 900, borderRadius: 1.5 }} />
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 800 }}>{manageEntry.resource?.name}</Typography>
+                              <Typography variant="caption" color="text.secondary">{manageEntry.resource?.resourceKey}</Typography>
+                            </Box>
+                          </Box>
+                          <Button size="small" color="error" variant="outlined" onClick={handleUnlink} sx={{ borderRadius: 2, flexShrink: 0 }}>
+                            Remove
+                          </Button>
+                        </Paper>
+                      )}
+                      {manageEntry.awsResourceId && (
+                        <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                            <Chip label="AWS" size="small" color="warning" sx={{ fontSize: "0.6rem", fontWeight: 900, borderRadius: 1.5 }} />
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 800 }}>{manageEntry.awsResource?.name}</Typography>
+                              <Typography variant="caption" color="text.secondary">{manageEntry.awsResource?.resourceKey}</Typography>
+                            </Box>
+                          </Box>
+                          <Button size="small" color="error" variant="outlined" onClick={handleUnlink} sx={{ borderRadius: 2, flexShrink: 0 }}>
+                            Remove
+                          </Button>
+                        </Paper>
+                      )}
+                      {manageEntry.credentialId && (
+                        <Paper variant="outlined" sx={{ p: 2, borderRadius: 3, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                            <Chip label="CREDENTIAL" size="small" color="info" sx={{ fontSize: "0.6rem", fontWeight: 900, borderRadius: 1.5 }} />
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 800 }}>{manageEntry.credential?.appName}</Typography>
+                              <Typography variant="caption" color="text.secondary">credential</Typography>
+                            </Box>
+                          </Box>
+                          <Button size="small" color="error" variant="outlined" onClick={handleUnlink} sx={{ borderRadius: 2, flexShrink: 0 }}>
+                            Remove
+                          </Button>
+                        </Paper>
+                      )}
+                    </Box>
+                  )}
+
+                  <Divider sx={{ mb: 3 }} />
+
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary", display: "block", mb: 2 }}>
+                    {manageEntry.resourceId || manageEntry.awsResourceId || manageEntry.credentialId ? "CHANGE ASSOCIATION" : "LINK TO"}
+                  </Typography>
+
+                  {/* Type selector */}
+                  <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+                    {([
+                      { key: "resource", label: "Web App", icon: <Link2 size={13} /> },
+                      { key: "aws", label: "AWS Resource", icon: <ShieldCheck size={13} /> },
+                      { key: "credential", label: "Credential", icon: <KeyRound size={13} /> },
+                    ] as const).map(({ key, label, icon }) => (
+                      <Button
+                        key={key}
+                        size="small"
+                        variant={assocType === key ? "contained" : "outlined"}
+                        startIcon={icon}
+                        onClick={() => { setAssocType(key); setAssocTarget(null); }}
+                        sx={{ borderRadius: 2, textTransform: "none", fontWeight: assocType === key ? 700 : 500 }}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </Stack>
+
+                  {/* Searchable dropdown + associate button */}
+                  <Stack direction="row" spacing={1} alignItems="flex-start">
+                    <Autocomplete
+                      fullWidth
+                      size="small"
+                      options={assocType === "resource" ? orgResources : assocType === "aws" ? orgAwsResources : orgCredentials}
+                      value={assocTarget}
+                      onChange={(_, v) => setAssocTarget(v)}
+                      getOptionLabel={(o) => assocType === "credential" ? (o.appName ?? "") : (o.name ?? "")}
+                      isOptionEqualToValue={(a, b) => a.id === b.id}
+                      filterOptions={(opts, { inputValue }) => {
+                        const q = inputValue.toLowerCase();
+                        if (!q) return opts;
+                        if (assocType === "resource") {
+                          return opts.filter(r =>
+                            r.name?.toLowerCase().includes(q) ||
+                            r.appHost?.toLowerCase().includes(q) ||
+                            r.environment?.toLowerCase().includes(q) ||
+                            r.description?.toLowerCase().includes(q)
+                          );
+                        }
+                        if (assocType === "aws") {
+                          return opts.filter(r =>
+                            r.name?.toLowerCase().includes(q) ||
+                            r.awsAccountId?.includes(q) ||
+                            r.region?.toLowerCase().includes(q) ||
+                            r.environment?.toLowerCase().includes(q) ||
+                            r.roleArn?.toLowerCase().includes(q)
+                          );
+                        }
+                        return opts.filter(c =>
+                          c.appName?.toLowerCase().includes(q) ||
+                          c.username?.toLowerCase().includes(q) ||
+                          c.loginUrl?.toLowerCase().includes(q) ||
+                          c.description?.toLowerCase().includes(q)
+                        );
+                      }}
+                      renderOption={(props, option) => {
+                        const { key, ...rest } = props as any;
+                        if (assocType === "resource") {
+                          return (
+                            <Box component="li" key={key} {...rest} sx={{ py: "10px !important" }}>
+                              <Box sx={{ width: "100%" }}>
+                                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.25 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{option.name}</Typography>
+                                  <Chip label={(option.environment ?? "").toUpperCase()} size="small"
+                                    color={option.environment === "production" ? "success" : option.environment === "staging" ? "info" : "warning"}
+                                    sx={{ fontSize: "0.55rem", height: 16, borderRadius: 1 }} />
+                                  {option.loginAdapter && (
+                                    <Chip label={option.loginAdapter.replace("_", " ")} size="small" variant="outlined"
+                                      sx={{ fontSize: "0.55rem", height: 16, borderRadius: 1 }} />
+                                  )}
+                                </Box>
+                                <Typography variant="caption" sx={{ color: "text.secondary", fontFamily: "monospace" }}>
+                                  {option.appHost}
+                                </Typography>
+                              </Box>
+                            </Box>
+                          );
+                        }
+                        if (assocType === "aws") {
+                          const roleName = option.roleArn?.split("/").pop() ?? option.roleArn;
+                          const shortAccount = option.awsAccountId?.length === 12
+                            ? `${option.awsAccountId.slice(0, 4)}…${option.awsAccountId.slice(-4)}`
+                            : option.awsAccountId;
+                          return (
+                            <Box component="li" key={key} {...rest} sx={{ py: "10px !important" }}>
+                              <Box sx={{ width: "100%" }}>
+                                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.25 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{option.name}</Typography>
+                                  <Chip label={(option.environment ?? "").toUpperCase()} size="small"
+                                    color={option.environment === "production" ? "success" : option.environment === "staging" ? "info" : "warning"}
+                                    sx={{ fontSize: "0.55rem", height: 16, borderRadius: 1 }} />
+                                </Box>
+                                <Typography variant="caption" sx={{ color: "text.secondary", fontFamily: "monospace" }}>
+                                  {shortAccount} · {option.region} · {roleName}
+                                </Typography>
+                              </Box>
+                            </Box>
+                          );
+                        }
+                        // credential
+                        return (
+                          <Box component="li" key={key} {...rest} sx={{ py: "10px !important" }}>
+                            <Box sx={{ width: "100%" }}>
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.25 }}>
+                                <Typography variant="body2" sx={{ fontWeight: 700 }}>{option.appName}</Typography>
+                                {option.username && (
+                                  <Typography variant="caption" sx={{ fontFamily: "monospace", color: "text.secondary" }}>
+                                    {option.username}
+                                  </Typography>
+                                )}
+                              </Box>
+                              {option.loginUrl && (
+                                <Typography variant="caption" sx={{ color: "primary.light", fontFamily: "monospace" }}>
+                                  {option.loginUrl}
+                                </Typography>
+                              )}
+                              {option.description && !option.loginUrl && (
+                                <Typography variant="caption" color="text.secondary">{option.description}</Typography>
+                              )}
+                            </Box>
+                          </Box>
+                        );
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          placeholder={
+                            assocType === "resource"
+                              ? "Search by app name, host, or environment…"
+                              : assocType === "aws"
+                              ? "Search by name, account ID, region, or role…"
+                              : "Search by app name, username, or login URL…"
+                          }
+                        />
+                      )}
+                      noOptionsText={
+                        assocType === "resource"
+                          ? "No web resources found for this org"
+                          : assocType === "aws"
+                          ? "No AWS resources found for this org"
+                          : "No credentials found for this org"
+                      }
+                    />
+                    <Button
+                      variant="contained"
+                      onClick={handleAssociate}
+                      disabled={!assocTarget || associating}
+                      sx={{ flexShrink: 0, height: 40 }}
+                    >
+                      {associating ? <CircularProgress size={16} /> : "Link"}
+                    </Button>
+                  </Stack>
+
+                  {assocTarget && (
+                    <Alert severity="info" sx={{ mt: 2, borderRadius: 2 }}>
+                      Linking this 2FA code will replace any existing association. Click <strong>Link</strong> to confirm.
+                    </Alert>
                   )}
                 </Box>
               )}

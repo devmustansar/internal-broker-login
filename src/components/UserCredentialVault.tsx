@@ -6,7 +6,8 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, useTheme, alpha,
   TablePagination, InputAdornment, Container
 } from "@mui/material";
-import { KeyRound, AppWindow, Copy, Check, Eye, EyeOff, Lock, Users, Search, RefreshCw } from "lucide-react";
+import { KeyRound, AppWindow, Copy, Check, Eye, EyeOff, Lock, Users, Search, RefreshCw, ShieldCheck, ExternalLink } from "lucide-react";
+import LinkedOtpDisplay from "./LinkedOtpDisplay";
 
 const ROWS_PER_PAGE_OPTIONS = [6, 12, 24];
 
@@ -176,9 +177,35 @@ export default function UserCredentialVault() {
                           {cred.organization?.name}
                         </Typography>
                         {cred.loginUrl && (
-                          <Typography variant="caption" sx={{ color: 'primary.light', fontFamily: 'monospace', display: 'block', mt: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {cred.loginUrl}
-                          </Typography>
+                          <a
+                            href={cred.loginUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ display: 'block', marginTop: 4 }}
+                          >
+                            <Typography variant="caption" sx={{
+                              color: 'primary.light', fontFamily: 'monospace',
+                              display: 'flex', alignItems: 'center', gap: 0.5,
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              textDecoration: 'none', '&:hover': { textDecoration: 'underline' }
+                            }}>
+                              <ExternalLink size={10} style={{ flexShrink: 0 }} />
+                              {cred.loginUrl}
+                            </Typography>
+                          </a>
+                        )}
+                        {cred.twoFactorEntries?.length > 0 && (
+                          <Tooltip title={cred.twoFactorEntries.map((t: any) => t.appName).join(", ")}>
+                            <Chip
+                              icon={<ShieldCheck size={10} />}
+                              label={`2FA (${cred.twoFactorEntries.length})`}
+                              size="small"
+                              color="success"
+                              variant="outlined"
+                              sx={{ fontSize: '0.6rem', height: 18, mt: 0.5 }}
+                            />
+                          </Tooltip>
                         )}
                       </Box>
                       <Chip
@@ -186,7 +213,7 @@ export default function UserCredentialVault() {
                         icon={cred.sharedVia === 'direct' ? <Lock size={12} /> : <Users size={12} />}
                         label={cred.sharedVia === 'direct' ? 'Direct' : 'Group'}
                         variant="outlined"
-                        sx={{ fontSize: '0.65rem', fontWeight: 700, ml: 1, flexShrink: 0 }}
+                        sx={{ fontSize: '0.65rem', fontWeight: 700, ml: 1, flexShrink: 0, alignSelf: 'flex-start' }}
                       />
                     </Box>
                   </Paper>
@@ -288,6 +315,11 @@ export default function UserCredentialVault() {
                     sx={{ mt: 0.5, '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
                   />
                 </Box>
+                {selectedCred.twoFactorEntries?.length > 0 && (
+                  <Box sx={{ p: 1.5, borderRadius: 2, border: '1px solid', borderColor: 'divider', bgcolor: 'background.default' }}>
+                    <LinkedOtpDisplay credentialId={selectedCred.id} autoReveal />
+                  </Box>
+                )}
                 {selectedCred.groups && selectedCred.groups.length > 0 && (
                    <Box>
                      <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary' }}>SHARED GROUPS</Typography>

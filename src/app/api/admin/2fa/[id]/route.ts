@@ -35,6 +35,12 @@ const ENTRY_SELECT = {
   ownerId: true,
   createdAt: true,
   updatedAt: true,
+  resourceId: true,
+  awsResourceId: true,
+  credentialId: true,
+  resource: { select: { id: true, name: true, resourceKey: true } },
+  awsResource: { select: { id: true, name: true, resourceKey: true } },
+  credential: { select: { id: true, appName: true } },
 };
 
 /**
@@ -102,6 +108,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body.environment !== undefined) updateData.environment = body.environment;
     if (body.notes !== undefined) updateData.notes = body.notes;
     if (body.allowNotesForUsers !== undefined) updateData.allowNotesForUsers = body.allowNotesForUsers;
+    if ("resourceId" in body) updateData.resourceId = body.resourceId ?? null;
+    if ("awsResourceId" in body) updateData.awsResourceId = body.awsResourceId ?? null;
+    if ("credentialId" in body) updateData.credentialId = body.credentialId ?? null;
     if (body.status !== undefined) {
       updateData.status = body.status;
       if (body.status === "disabled") {

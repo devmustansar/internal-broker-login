@@ -20,19 +20,21 @@ export async function GET(req: NextRequest) {
     const auth = await getAuthContext(req);
     if (!auth) return unauthorized();
 
+    const credInclude = {
+      organization: { select: { id: true, name: true } },
+      groups: {
+        include: { group: { select: { id: true, name: true } } },
+      },
+      twoFactorEntries: {
+        where: { deletedAt: null, status: "active" },
+        select: { id: true, appName: true },
+      },
+    };
+
     // 1. Direct shares
     const directShares = await prisma.credentialShare.findMany({
       where: { userId: auth.userId },
-      include: {
-        credential: {
-          include: {
-            organization: { select: { id: true, name: true } },
-            groups: {
-              include: { group: { select: { id: true, name: true } } },
-            },
-          },
-        },
-      },
+      include: { credential: { include: credInclude } },
     });
 
     // 2. Group-based shares
@@ -42,16 +44,7 @@ export async function GET(req: NextRequest) {
         group: {
           include: {
             credentials: {
-              include: {
-                credential: {
-                  include: {
-                    organization: { select: { id: true, name: true } },
-                    groups: {
-                      include: { group: { select: { id: true, name: true } } },
-                    },
-                  },
-                },
-              },
+              include: { credential: { include: credInclude } },
             },
           },
         },
@@ -77,6 +70,7 @@ export async function GET(req: NextRequest) {
           password: decrypted.password,
           organization: cred.organization,
           groups: cred.groups.map((g: any) => g.group),
+          twoFactorEntries: cred.twoFactorEntries ?? [],
           sharedVia: "direct",
         });
       }
@@ -99,6 +93,7 @@ export async function GET(req: NextRequest) {
             password: decrypted.password,
             organization: cred.organization,
             groups: cred.groups.map((g: any) => g.group),
+            twoFactorEntries: cred.twoFactorEntries ?? [],
             sharedVia: `group:${membership.group.name}`,
           });
         }

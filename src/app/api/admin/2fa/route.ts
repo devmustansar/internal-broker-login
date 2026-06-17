@@ -92,6 +92,12 @@ export async function GET(req: NextRequest) {
           createdById: true,
           createdAt: true,
           updatedAt: true,
+          resourceId: true,
+          awsResourceId: true,
+          credentialId: true,
+          resource: { select: { id: true, name: true, resourceKey: true } },
+          awsResource: { select: { id: true, name: true, resourceKey: true } },
+          credential: { select: { id: true, appName: true } },
           _count: { select: { assignments: true } },
         },
       }),
@@ -99,9 +105,14 @@ export async function GET(req: NextRequest) {
     ]);
 
     return NextResponse.json({
-      items: items.map(({ _count, ...rest }) => ({
+      items: items.map(({ _count, resource, awsResource, credential, ...rest }) => ({
         ...rest,
         assignmentCount: _count.assignments,
+        resourceName: resource?.name ?? null,
+        resourceKey: resource?.resourceKey ?? null,
+        awsResourceName: awsResource?.name ?? null,
+        awsResourceKey: awsResource?.resourceKey ?? null,
+        credentialAppName: credential?.appName ?? null,
       })),
       total,
       page,
@@ -178,6 +189,9 @@ export async function POST(req: NextRequest) {
         status: body.status ?? "active",
         createdById: auth.userId,
         ownerId: auth.userId,
+        resourceId: body.resourceId ?? null,
+        awsResourceId: body.awsResourceId ?? null,
+        credentialId: body.credentialId ?? null,
       },
       select: {
         id: true,

@@ -20,7 +20,8 @@ import {
   Alert,
   Fade
 } from "@mui/material";
-import { Server, ExternalLink, ShieldAlert, Globe, Activity } from "lucide-react";
+import { ExternalLink, ShieldAlert, Globe, ShieldCheck } from "lucide-react";
+import LinkedOtpDisplay from "./LinkedOtpDisplay";
 import {
   STR_APP_FAIL_LAUNCH,
   STR_APP_PROVISIONING,
@@ -28,7 +29,7 @@ import {
 } from "@/lib/constants";
 
 interface AppCardProps {
-  resource: Resource;
+  resource: Resource & { twoFactorCount?: number };
   onOpen: (result: OpenAppResponse) => void;
 }
 
@@ -135,13 +136,24 @@ export default function AppCard({ resource, onOpen }: AppCardProps) {
             <Typography variant="h3" sx={{ fontSize: '1.1rem', fontWeight: 800, color: 'text.primary', mb: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {resource.name}
             </Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Chip 
-                label={resource.environment.toUpperCase()} 
-                size="small" 
-                color={ENV_COLORS[resource.environment] || "info"} 
-                sx={{ height: 18, fontSize: '0.6rem', fontWeight: 900, borderRadius: 1.5 }} 
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+              <Chip
+                label={resource.environment.toUpperCase()}
+                size="small"
+                color={ENV_COLORS[resource.environment] || "info"}
+                sx={{ height: 18, fontSize: '0.6rem', fontWeight: 900, borderRadius: 1.5 }}
               />
+              {(resource.twoFactorCount ?? 0) > 0 && (
+                <Tooltip title={`${resource.twoFactorCount} 2FA code${resource.twoFactorCount !== 1 ? "s" : ""} linked`}>
+                  <Chip
+                    icon={<ShieldCheck size={10} />}
+                    label="2FA"
+                    size="small"
+                    color="success"
+                    sx={{ height: 18, fontSize: '0.6rem', fontWeight: 900, borderRadius: 1.5 }}
+                  />
+                </Tooltip>
+              )}
               {resource.description && (
                 <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   • {resource.description}
@@ -162,6 +174,12 @@ export default function AppCard({ resource, onOpen }: AppCardProps) {
               {error}
             </Alert>
           </Fade>
+        )}
+
+        {(resource.twoFactorCount ?? 0) > 0 && (
+          <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+            <LinkedOtpDisplay resourceId={resource.id} />
+          </Box>
         )}
       </CardContent>
 

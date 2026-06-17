@@ -2,23 +2,25 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/app-context";
-import { 
-  Box, 
-  Typography, 
-  Card, 
-  CardContent, 
-  CardActions, 
-  Avatar, 
-  Chip, 
-  Button, 
-  Stack, 
-  alpha, 
+import {
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  CardActions,
+  Avatar,
+  Chip,
+  Button,
+  Stack,
+  alpha,
   useTheme,
   Alert,
   Fade,
-  LinearProgress
+  LinearProgress,
+  Tooltip
 } from "@mui/material";
-import { Cloud, ExternalLink, ShieldCheck, Cpu, KeyRound } from "lucide-react";
+import { Cloud, ExternalLink, ShieldCheck, Cpu, KeyRound, Shield } from "lucide-react";
+import LinkedOtpDisplay from "./LinkedOtpDisplay";
 import { 
   STR_AWS_FAIL_LAUNCH,
   STR_AWS_SUCCESS,
@@ -38,6 +40,7 @@ interface AwsCardProps {
     destination: string;
     environment: string;
     stsStrategy: string;
+    twoFactorCount?: number;
   };
 }
 
@@ -128,13 +131,24 @@ export default function AwsAppCard({ resource }: AwsCardProps) {
             <Typography variant="h3" sx={{ fontSize: '1.1rem', fontWeight: 800, color: 'text.primary', mb: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {resource.name}
             </Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Chip 
-                label={resource.environment.toUpperCase()} 
-                size="small" 
-                color={ENV_COLORS[resource.environment] || "info"} 
-                sx={{ height: 18, fontSize: '0.6rem', fontWeight: 900, borderRadius: 1.5 }} 
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+              <Chip
+                label={resource.environment.toUpperCase()}
+                size="small"
+                color={ENV_COLORS[resource.environment] || "info"}
+                sx={{ height: 18, fontSize: '0.6rem', fontWeight: 900, borderRadius: 1.5 }}
               />
+              {(resource.twoFactorCount ?? 0) > 0 && (
+                <Tooltip title={`${resource.twoFactorCount} 2FA code${resource.twoFactorCount !== 1 ? "s" : ""} linked`}>
+                  <Chip
+                    icon={<Shield size={10} />}
+                    label="2FA"
+                    size="small"
+                    color="success"
+                    sx={{ height: 18, fontSize: '0.6rem', fontWeight: 900, borderRadius: 1.5 }}
+                  />
+                </Tooltip>
+              )}
               <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
                 • AWS CONSOLE
               </Typography>
@@ -162,6 +176,12 @@ export default function AwsAppCard({ resource }: AwsCardProps) {
               {STR_AWS_SUCCESS}
             </Alert>
           </Fade>
+        )}
+
+        {(resource.twoFactorCount ?? 0) > 0 && (
+          <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+            <LinkedOtpDisplay awsResourceId={resource.id} />
+          </Box>
         )}
       </CardContent>
 

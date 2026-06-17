@@ -335,6 +335,31 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
           <Alert severity="info" sx={{ borderRadius: 3 }}>{credSearch ? "No credentials match your search." : "No credentials found. Add one to get started."}</Alert>
         ) : (
           <>
+            {canDelete && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, pl: 0.5 }}>
+                <Checkbox
+                  size="small"
+                  checked={paginatedCreds.length > 0 && paginatedCreds.every(c => selectedCredIds.has(c.id))}
+                  indeterminate={paginatedCreds.some(c => selectedCredIds.has(c.id)) && !paginatedCreds.every(c => selectedCredIds.has(c.id))}
+                  onChange={(e) => {
+                    setSelectedCredIds(prev => {
+                      const next = new Set(prev);
+                      paginatedCreds.forEach(c => e.target.checked ? next.add(c.id) : next.delete(c.id));
+                      return next;
+                    });
+                  }}
+                  sx={{ flexShrink: 0 }}
+                />
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                  {paginatedCreds.every(c => selectedCredIds.has(c.id)) && paginatedCreds.length > 0 ? 'Deselect page' : 'Select page'}
+                </Typography>
+                {selectedCredIds.size > 0 && (
+                  <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 700, ml: 1 }}>
+                    ({selectedCredIds.size} selected)
+                  </Typography>
+                )}
+              </Box>
+            )}
             <Stack spacing={2}>
               {paginatedCreds.map((cred) => (
                 <Paper key={cred.id} sx={{ p: 3, borderRadius: 4, display: "flex", alignItems: "center", gap: 1, transition: 'all 0.2s', '&:hover': { borderColor: 'primary.main' } }}>
@@ -381,6 +406,31 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
           <Alert severity="info" sx={{ borderRadius: 3 }}>{groupSearch ? "No groups match your search." : "No credential groups found. Create one to organize."}</Alert>
         ) : (
           <>
+            {canDelete && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, pl: 0.5 }}>
+                <Checkbox
+                  size="small"
+                  checked={paginatedGroups.length > 0 && paginatedGroups.every(g => selectedGroupIds.has(g.id))}
+                  indeterminate={paginatedGroups.some(g => selectedGroupIds.has(g.id)) && !paginatedGroups.every(g => selectedGroupIds.has(g.id))}
+                  onChange={(e) => {
+                    setSelectedGroupIds(prev => {
+                      const next = new Set(prev);
+                      paginatedGroups.forEach(g => e.target.checked ? next.add(g.id) : next.delete(g.id));
+                      return next;
+                    });
+                  }}
+                  sx={{ flexShrink: 0 }}
+                />
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                  {paginatedGroups.every(g => selectedGroupIds.has(g.id)) && paginatedGroups.length > 0 ? 'Deselect page' : 'Select page'}
+                </Typography>
+                {selectedGroupIds.size > 0 && (
+                  <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 700, ml: 1 }}>
+                    ({selectedGroupIds.size} selected)
+                  </Typography>
+                )}
+              </Box>
+            )}
             <Stack spacing={2}>
               {paginatedGroups.map((group) => (
                 <Paper key={group.id} sx={{ p: 3, borderRadius: 4, display: "flex", alignItems: "center", gap: 1, transition: 'all 0.2s', '&:hover': { borderColor: 'primary.main' } }}>

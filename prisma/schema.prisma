@@ -64,10 +64,11 @@ model Resource {
   organization   Organization? @relation(fields: [organizationId], references: [id])
   organizationId String?
 
-  accounts       ManagedAccount[]
-  sessions       BrokerSession[]
-  auditLogs      AuditLog[]
-  userAccess     UserResourceAccess[]
+  accounts         ManagedAccount[]
+  sessions         BrokerSession[]
+  auditLogs        AuditLog[]
+  userAccess       UserResourceAccess[]
+  twoFactorEntries TwoFactorEntry[]     @relation("ResourceTwoFactor")
 }
 
 model ManagedAccount {
@@ -234,6 +235,7 @@ model AwsResource {
 
   userPolicies         UserAwsPolicy[]
   userAccess           UserResourceAccess[]
+  twoFactorEntries     TwoFactorEntry[]     @relation("AwsResourceTwoFactor")
 }
 
 /// Join table: associates a User with a Resource (web) or AwsResource by ID.
@@ -334,6 +336,7 @@ model SharedCredential {
 
   groups           CredentialGroupEntry[]
   shares           CredentialShare[]
+  twoFactorEntries TwoFactorEntry[]      @relation("CredentialTwoFactor")
 
   @@index([organizationId])
 }
@@ -421,6 +424,13 @@ model TwoFactorEntry {
   createdById      String
   owner            User?     @relation("TwoFactorOwner", fields: [ownerId], references: [id])
   ownerId          String?
+
+  resource         Resource?         @relation("ResourceTwoFactor", fields: [resourceId], references: [id], onDelete: SetNull)
+  resourceId       String?
+  awsResource      AwsResource?      @relation("AwsResourceTwoFactor", fields: [awsResourceId], references: [id], onDelete: SetNull)
+  awsResourceId    String?
+  credential       SharedCredential? @relation("CredentialTwoFactor", fields: [credentialId], references: [id], onDelete: SetNull)
+  credentialId     String?
 
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
