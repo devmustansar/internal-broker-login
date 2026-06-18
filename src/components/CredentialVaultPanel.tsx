@@ -59,11 +59,14 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
   // Manage states
   const [manageCred, setManageCred] = useState<any>(null);
   const [manageCredLoading, setManageCredLoading] = useState(false);
-  const [shareUser, setShareUser] = useState<any>(null);
+  const [shareUsers, setShareUsers] = useState<any[]>([]);
+  const [addingShares, setAddingShares] = useState(false);
 
   const [manageGroup, setManageGroup] = useState<any>(null);
-  const [groupMemberUser, setGroupMemberUser] = useState<any>(null);
-  const [groupCredOption, setGroupCredOption] = useState<any>(null);
+  const [groupMemberUsers, setGroupMemberUsers] = useState<any[]>([]);
+  const [groupCredOptions, setGroupCredOptions] = useState<any[]>([]);
+  const [addingMembers, setAddingMembers] = useState(false);
+  const [addingGroupCreds, setAddingGroupCreds] = useState(false);
 
   useEffect(() => { fetchOrgs(); }, []);
 
@@ -199,17 +202,21 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
     try {
       const res = await fetch(`/api/admin/credentials/${id}`);
       if (!res.ok) throw new Error("Failed to load credential details");
-      setManageCred(await res.json()); setShareUser(null);
+      setManageCred(await res.json()); setShareUsers([]);
     } catch (err: any) { onError(err.message); } finally { setManageCredLoading(false); }
   };
 
   const handleAddShare = async () => {
-    if (!shareUser) return;
+    if (shareUsers.length === 0) return;
+    setAddingShares(true);
     try {
-      const res = await fetch(`/api/admin/credentials/${manageCred.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: shareUser.user.id }) });
-      if (!res.ok) throw new Error("Failed to share credential");
-      onSuccess("Credential shared."); setShareUser(null); openManageCred(manageCred.id);
-    } catch (err: any) { onError(err.message); }
+      for (const member of shareUsers) {
+        const res = await fetch(`/api/admin/credentials/${manageCred.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: member.user.id }) });
+        if (!res.ok) throw new Error(`Failed to share with ${member.user.name}`);
+      }
+      onSuccess(`Credential shared with ${shareUsers.length} user${shareUsers.length !== 1 ? "s" : ""}.`);
+      setShareUsers([]); openManageCred(manageCred.id);
+    } catch (err: any) { onError(err.message); } finally { setAddingShares(false); }
   };
 
   const handleRemoveShare = async (userId: string) => {
@@ -229,7 +236,7 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
     } catch (err: any) { onError(err.message); }
   };
 
-  const openManageGroup = (group: any) => { setManageGroup(group); setGroupMemberUser(null); setGroupCredOption(null); };
+  const openManageGroup = (group: any) => { setManageGroup(group); setGroupMemberUsers([]); setGroupCredOptions([]); };
 
   const reloadGroup = async () => {
     const res = await fetch(`/api/admin/credential-groups?organizationId=${selectedOrgId}`);
@@ -237,12 +244,16 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
   };
 
   const handleAddGroupMember = async () => {
-    if (!groupMemberUser) return;
+    if (groupMemberUsers.length === 0) return;
+    setAddingMembers(true);
     try {
-      const res = await fetch(`/api/admin/credential-groups/${manageGroup.id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: groupMemberUser.user.id }) });
-      if (!res.ok) throw new Error("Failed to add member");
-      onSuccess("Member added to group."); setGroupMemberUser(null); reloadGroup();
-    } catch (err: any) { onError(err.message); }
+      for (const member of groupMemberUsers) {
+        const res = await fetch(`/api/admin/credential-groups/${manageGroup.id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: member.user.id }) });
+        if (!res.ok) throw new Error(`Failed to add ${member.user.name}`);
+      }
+      onSuccess(`${groupMemberUsers.length} member${groupMemberUsers.length !== 1 ? "s" : ""} added to group.`);
+      setGroupMemberUsers([]); reloadGroup();
+    } catch (err: any) { onError(err.message); } finally { setAddingMembers(false); }
   };
 
   const handleRemoveGroupMember = async (userId: string) => {
@@ -254,12 +265,16 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
   };
 
   const handleAddGroupCred = async () => {
-    if (!groupCredOption) return;
+    if (groupCredOptions.length === 0) return;
+    setAddingGroupCreds(true);
     try {
-      const res = await fetch(`/api/admin/credential-groups/${manageGroup.id}/credentials`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ credentialId: groupCredOption.id }) });
-      if (!res.ok) throw new Error("Failed to add credential");
-      onSuccess("Credential added to group."); setGroupCredOption(null); reloadGroup();
-    } catch (err: any) { onError(err.message); }
+      for (const cred of groupCredOptions) {
+        const res = await fetch(`/api/admin/credential-groups/${manageGroup.id}/credentials`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ credentialId: cred.id }) });
+        if (!res.ok) throw new Error(`Failed to add ${cred.appName}`);
+      }
+      onSuccess(`${groupCredOptions.length} credential${groupCredOptions.length !== 1 ? "s" : ""} added to group.`);
+      setGroupCredOptions([]); reloadGroup();
+    } catch (err: any) { onError(err.message); } finally { setAddingGroupCreds(false); }
   };
 
   const handleRemoveGroupCred = async (credentialId: string) => {
@@ -519,13 +534,16 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
                 </Grid>
                 <Grid size={{ xs: 12, md: 6 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 2, color: 'text.secondary' }}>DIRECT USER SHARES</Typography>
-                  <Stack direction="row" spacing={1} mb={2}>
-                    <Autocomplete size="small" fullWidth options={availableShareMembers}
+                  <Stack spacing={1} mb={2}>
+                    <Autocomplete multiple disableCloseOnSelect size="small" fullWidth options={availableShareMembers}
                       getOptionLabel={(o) => `${o.user.name} (${o.user.email})`}
                       filterOptions={(options, { inputValue }) => { const q = inputValue.toLowerCase(); return options.filter(o => o.user.name?.toLowerCase().includes(q) || o.user.email?.toLowerCase().includes(q)); }}
-                      value={shareUser} onChange={(_, v) => setShareUser(v)}
-                      renderInput={(params) => <TextField {...params} placeholder="Search user by name or email..." />} />
-                    <Button variant="contained" onClick={handleAddShare} disabled={!shareUser}>Add</Button>
+                      value={shareUsers} onChange={(_, v) => setShareUsers(v)}
+                      renderInput={(params) => <TextField {...params} placeholder={shareUsers.length === 0 ? "Search users by name or email…" : ""} />}
+                      limitTags={3} />
+                    <Button variant="contained" onClick={handleAddShare} disabled={shareUsers.length === 0 || addingShares} fullWidth sx={{ borderRadius: 2, fontWeight: 700 }}>
+                      {addingShares ? <CircularProgress size={18} color="inherit" /> : shareUsers.length > 1 ? `Share with ${shareUsers.length} Users` : "Share"}
+                    </Button>
                   </Stack>
                   <List dense>
                     {manageCred.shares?.length === 0 && <Typography variant="caption" color="text.secondary">Not shared with any users directly.</Typography>}
@@ -556,13 +574,16 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
               <Grid container spacing={4}>
                 <Grid size={{ xs: 12, md: 6 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 2, color: 'text.secondary' }}>GROUP MEMBERS</Typography>
-                  <Stack direction="row" spacing={1} mb={2}>
-                    <Autocomplete size="small" fullWidth options={availableGroupMembers}
+                  <Stack spacing={1} mb={2}>
+                    <Autocomplete multiple disableCloseOnSelect size="small" fullWidth options={availableGroupMembers}
                       getOptionLabel={(o) => `${o.user.name} (${o.user.email})`}
                       filterOptions={(options, { inputValue }) => { const q = inputValue.toLowerCase(); return options.filter(o => o.user.name?.toLowerCase().includes(q) || o.user.email?.toLowerCase().includes(q)); }}
-                      value={groupMemberUser} onChange={(_, v) => setGroupMemberUser(v)}
-                      renderInput={(params) => <TextField {...params} placeholder="Search user by name or email..." />} />
-                    <Button variant="contained" onClick={handleAddGroupMember} disabled={!groupMemberUser}>Add</Button>
+                      value={groupMemberUsers} onChange={(_, v) => setGroupMemberUsers(v)}
+                      renderInput={(params) => <TextField {...params} placeholder={groupMemberUsers.length === 0 ? "Search users by name or email…" : ""} />}
+                      limitTags={3} />
+                    <Button variant="contained" onClick={handleAddGroupMember} disabled={groupMemberUsers.length === 0 || addingMembers} fullWidth sx={{ borderRadius: 2, fontWeight: 700 }}>
+                      {addingMembers ? <CircularProgress size={18} color="inherit" /> : groupMemberUsers.length > 1 ? `Add ${groupMemberUsers.length} Members` : "Add Member"}
+                    </Button>
                   </Stack>
                   <List dense>
                     {manageGroup.members.length === 0 && <Typography variant="caption" color="text.secondary">No members in this group.</Typography>}
@@ -576,13 +597,16 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
                 </Grid>
                 <Grid size={{ xs: 12, md: 6 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 2, color: 'text.secondary' }}>GROUP CREDENTIALS</Typography>
-                  <Stack direction="row" spacing={1} mb={2}>
-                    <Autocomplete size="small" fullWidth options={availableGroupCreds}
+                  <Stack spacing={1} mb={2}>
+                    <Autocomplete multiple disableCloseOnSelect size="small" fullWidth options={availableGroupCreds}
                       getOptionLabel={(o) => `${o.appName}${o.username ? ` — ${o.username}` : ''}`}
                       filterOptions={(options, { inputValue }) => { const q = inputValue.toLowerCase(); return options.filter(o => o.appName?.toLowerCase().includes(q) || o.loginUrl?.toLowerCase().includes(q)); }}
-                      value={groupCredOption} onChange={(_, v) => setGroupCredOption(v)}
-                      renderInput={(params) => <TextField {...params} placeholder="Search credential by app name or URL..." />} />
-                    <Button variant="contained" onClick={handleAddGroupCred} disabled={!groupCredOption}>Add</Button>
+                      value={groupCredOptions} onChange={(_, v) => setGroupCredOptions(v)}
+                      renderInput={(params) => <TextField {...params} placeholder={groupCredOptions.length === 0 ? "Search credentials by app name or URL…" : ""} />}
+                      limitTags={3} />
+                    <Button variant="contained" onClick={handleAddGroupCred} disabled={groupCredOptions.length === 0 || addingGroupCreds} fullWidth sx={{ borderRadius: 2, fontWeight: 700 }}>
+                      {addingGroupCreds ? <CircularProgress size={18} color="inherit" /> : groupCredOptions.length > 1 ? `Add ${groupCredOptions.length} Credentials` : "Add Credential"}
+                    </Button>
                   </Stack>
                   <List dense>
                     {manageGroup.credentials.length === 0 && <Typography variant="caption" color="text.secondary">No credentials in this group.</Typography>}

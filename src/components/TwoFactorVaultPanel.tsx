@@ -55,7 +55,8 @@ export default function TwoFactorVaultPanel({
   // Add / Edit dialog
   const [openForm, setOpenForm] = useState(false);
   const [editEntry, setEditEntry] = useState<any>(null);
-  const [inputMode, setInputMode] = useState<"manual" | "uri" | "qr">("manual");
+  const [inputMode, setInputMode] = useState<"manual" | "uri" | "qr">("qr");
+  const [qrParsed, setQrParsed] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [showSecret, setShowSecret] = useState(false);
   const [savingForm, setSavingForm] = useState(false);
@@ -92,6 +93,11 @@ export default function TwoFactorVaultPanel({
   const [migrationSelected, setMigrationSelected] = useState<Set<number>>(new Set());
   const [migrationCategory, setMigrationCategory] = useState("");
   const [migrationEnvironment, setMigrationEnvironment] = useState("production");
+  const [migrationNotes, setMigrationNotes] = useState("");
+  const [migrationAllowNotes, setMigrationAllowNotes] = useState(false);
+  const [migrationResourceId, setMigrationResourceId] = useState("");
+  const [migrationAwsResourceId, setMigrationAwsResourceId] = useState("");
+  const [migrationCredentialId, setMigrationCredentialId] = useState("");
   const [importingMigration, setImportingMigration] = useState(false);
 
   useEffect(() => { fetchOrgs(); }, []);
@@ -187,7 +193,8 @@ export default function TwoFactorVaultPanel({
   const openAdd = () => {
     setEditEntry(null);
     setForm({ ...EMPTY_FORM });
-    setInputMode("manual");
+    setInputMode("qr");
+    setQrParsed(false);
     setShowSecret(false);
     setOpenForm(true);
   };
@@ -232,6 +239,7 @@ export default function TwoFactorVaultPanel({
       // Standard TOTP
       setForm(prev => ({
         ...prev,
+        appName: data.issuer ?? data.accountLabel ?? prev.appName,
         secret: data.secret,
         issuer: data.issuer ?? prev.issuer,
         accountLabel: data.accountLabel ?? prev.accountLabel,
@@ -239,7 +247,7 @@ export default function TwoFactorVaultPanel({
         digits: String(data.digits ?? 6),
         period: String(data.period ?? 30),
       }));
-      setInputMode("manual");
+      setQrParsed(true);
       onSuccess("QR code parsed — review fields and save.");
     } catch (e: any) { onError(e.message); } finally {
       setQrParsing(false);
@@ -460,6 +468,11 @@ export default function TwoFactorVaultPanel({
             period: entry.period,
             category: migrationCategory || null,
             environment: migrationEnvironment || null,
+            notes: migrationNotes || null,
+            allowNotesForUsers: migrationAllowNotes,
+            resourceId: migrationResourceId || null,
+            awsResourceId: migrationAwsResourceId || null,
+            credentialId: migrationCredentialId || null,
             inputMode: "manual",
             secret: entry.secret,
           };
@@ -474,6 +487,11 @@ export default function TwoFactorVaultPanel({
       setOpenMigration(false);
       setMigrationEntries([]);
       setMigrationSelected(new Set());
+      setMigrationNotes("");
+      setMigrationAllowNotes(false);
+      setMigrationResourceId("");
+      setMigrationAwsResourceId("");
+      setMigrationCredentialId("");
       fetchEntries();
       if (failed === 0) {
         onSuccess(`Imported ${imported} account${imported !== 1 ? "s" : ""} from migration QR.`);
@@ -595,12 +613,12 @@ export default function TwoFactorVaultPanel({
             {!editEntry && (
               <>
                 <Stack direction="row" spacing={1}>
-                  {(["manual", "uri", "qr"] as const).map((mode) => (
+                  {(["qr", "manual", "uri"] as const).map((mode) => (
                     <Button key={mode} size="small" variant={inputMode === mode ? "contained" : "outlined"}
                       onClick={() => setInputMode(mode)}
-                      startIcon={mode === "manual" ? <KeyRound size={14} /> : mode === "uri" ? <Link2 size={14} /> : <QrCode size={14} />}
+                      startIcon={mode === "qr" ? <QrCode size={14} /> : mode === "manual" ? <KeyRound size={14} /> : <Link2 size={14} />}
                       sx={{ borderRadius: 2, textTransform: "none" }}>
-                      {mode === "manual" ? "Manual" : mode === "uri" ? "Paste URI" : "Upload QR"}
+                      {mode === "qr" ? "Upload QR" : mode === "manual" ? "Manual" : "Paste URI"}
                     </Button>
                   ))}
                 </Stack>
@@ -617,7 +635,7 @@ export default function TwoFactorVaultPanel({
                     <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleQrUpload} />
                     <Button fullWidth variant="outlined" startIcon={qrParsing ? <CircularProgress size={16} /> : <Upload size={16} />}
                       onClick={() => fileInputRef.current?.click()} disabled={qrParsing} sx={{ borderRadius: 3, py: 2, borderStyle: "dashed" }}>
-                      {qrParsing ? "Parsing…" : "Click to upload QR code image"}
+                      {qrParsing ? "Parsing…" : qrParsed ? "Re-upload QR code image" : "Click to upload QR code image"}
                     </Button>
                     <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
                       PNG / JPEG / WebP — max 5 MB. Image is never stored.
@@ -625,122 +643,129 @@ export default function TwoFactorVaultPanel({
                   </Box>
                 )}
 
-                <Alert severity="warning" sx={{ borderRadius: 2 }}>
-                  Secret is encrypted with AES-256-GCM before storage and never returned by any API.
-                </Alert>
+                {(inputMode !== "qr" || qrParsed) && (
+                  <Alert severity="warning" sx={{ borderRadius: 2 }}>
+                    Secret is encrypted with AES-256-GCM before storage and never returned by any API.
+                  </Alert>
+                )}
               </>
             )}
 
-            <TextField fullWidth required label="App Name" value={form.appName}
-              onChange={(e) => setForm((p) => ({ ...p, appName: e.target.value }))} />
-            <TextField fullWidth label="Issuer" value={form.issuer}
-              onChange={(e) => setForm((p) => ({ ...p, issuer: e.target.value }))} />
-            <TextField fullWidth label="Account Label" placeholder="user@example.com" value={form.accountLabel}
-              onChange={(e) => setForm((p) => ({ ...p, accountLabel: e.target.value }))} />
+            {/* Form fields — always visible when editing, or when not in QR mode, or after QR has been parsed */}
+            {(editEntry || inputMode !== "qr" || qrParsed) && (
+              <>
+                <TextField fullWidth required label="App Name" value={form.appName}
+                  onChange={(e) => setForm((p) => ({ ...p, appName: e.target.value }))} />
+                <TextField fullWidth label="Issuer" value={form.issuer}
+                  onChange={(e) => setForm((p) => ({ ...p, issuer: e.target.value }))} />
+                <TextField fullWidth label="Account Label" placeholder="user@example.com" value={form.accountLabel}
+                  onChange={(e) => setForm((p) => ({ ...p, accountLabel: e.target.value }))} />
 
-            {!editEntry && (
-              <TextField fullWidth required label="Secret (Base32)" type={showSecret ? "text" : "password"}
-                value={form.secret} onChange={(e) => setForm((p) => ({ ...p, secret: e.target.value }))}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton size="small" onClick={() => setShowSecret((s) => !s)}>
-                        {showSecret ? <EyeOff size={16} /> : <Eye size={16} />}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            )}
+                {!editEntry && (
+                  <TextField fullWidth required label="Secret (Base32)" type={showSecret ? "text" : "password"}
+                    value={form.secret} onChange={(e) => setForm((p) => ({ ...p, secret: e.target.value }))}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton size="small" onClick={() => setShowSecret((s) => !s)}>
+                            {showSecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                )}
 
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 4 }}>
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 4 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Algorithm</InputLabel>
+                      <Select label="Algorithm" value={form.algorithm} onChange={(e) => setForm((p) => ({ ...p, algorithm: e.target.value }))}>
+                        {ALGORITHMS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid size={{ xs: 4 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Digits</InputLabel>
+                      <Select label="Digits" value={form.digits} onChange={(e) => setForm((p) => ({ ...p, digits: e.target.value }))}>
+                        <MenuItem value="6">6</MenuItem>
+                        <MenuItem value="8">8</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid size={{ xs: 4 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Period (s)</InputLabel>
+                      <Select label="Period (s)" value={form.period} onChange={(e) => setForm((p) => ({ ...p, period: e.target.value }))}>
+                        <MenuItem value="30">30</MenuItem>
+                        <MenuItem value="60">60</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </Grid>
+
+                <Divider />
+
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 6 }}>
+                    <TextField fullWidth size="small" label="Category" placeholder="e.g. AWS, GitHub"
+                      value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))} />
+                  </Grid>
+                  <Grid size={{ xs: 6 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Environment</InputLabel>
+                      <Select label="Environment" value={form.environment} onChange={(e) => setForm((p) => ({ ...p, environment: e.target.value }))}>
+                        {ENVIRONMENTS.map((e) => <MenuItem key={e} value={e}>{e}</MenuItem>)}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </Grid>
+
+                <TextField fullWidth multiline rows={2} label="Notes (optional)" value={form.notes}
+                  onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} />
+
+                <Divider />
+                <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>ASSOCIATE WITH (OPTIONAL)</Typography>
                 <FormControl fullWidth size="small">
-                  <InputLabel>Algorithm</InputLabel>
-                  <Select label="Algorithm" value={form.algorithm} onChange={(e) => setForm((p) => ({ ...p, algorithm: e.target.value }))}>
-                    {ALGORITHMS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+                  <InputLabel>Web Resource</InputLabel>
+                  <Select label="Web Resource" value={form.resourceId}
+                    onChange={(e) => setForm((p) => ({ ...p, resourceId: e.target.value, awsResourceId: "", credentialId: "" }))}>
+                    <MenuItem value=""><em>None</em></MenuItem>
+                    {orgResources.map((r: any) => <MenuItem key={r.id} value={r.id}>{r.name} ({r.environment})</MenuItem>)}
                   </Select>
                 </FormControl>
-              </Grid>
-              <Grid size={{ xs: 4 }}>
                 <FormControl fullWidth size="small">
-                  <InputLabel>Digits</InputLabel>
-                  <Select label="Digits" value={form.digits} onChange={(e) => setForm((p) => ({ ...p, digits: e.target.value }))}>
-                    <MenuItem value="6">6</MenuItem>
-                    <MenuItem value="8">8</MenuItem>
+                  <InputLabel>AWS Resource</InputLabel>
+                  <Select label="AWS Resource" value={form.awsResourceId}
+                    onChange={(e) => setForm((p) => ({ ...p, awsResourceId: e.target.value, resourceId: "", credentialId: "" }))}>
+                    <MenuItem value=""><em>None</em></MenuItem>
+                    {orgAwsResources.map((r: any) => <MenuItem key={r.id} value={r.id}>{r.name} ({r.environment})</MenuItem>)}
                   </Select>
                 </FormControl>
-              </Grid>
-              <Grid size={{ xs: 4 }}>
                 <FormControl fullWidth size="small">
-                  <InputLabel>Period (s)</InputLabel>
-                  <Select label="Period (s)" value={form.period} onChange={(e) => setForm((p) => ({ ...p, period: e.target.value }))}>
-                    <MenuItem value="30">30</MenuItem>
-                    <MenuItem value="60">60</MenuItem>
+                  <InputLabel>Credential</InputLabel>
+                  <Select label="Credential" value={form.credentialId}
+                    onChange={(e) => setForm((p) => ({ ...p, credentialId: e.target.value, resourceId: "", awsResourceId: "" }))}>
+                    <MenuItem value=""><em>None</em></MenuItem>
+                    {orgCredentials.map((c: any) => <MenuItem key={c.id} value={c.id}>{c.appName}{c.username ? ` — ${c.username}` : ""}</MenuItem>)}
                   </Select>
                 </FormControl>
-              </Grid>
-            </Grid>
 
-            <Divider />
+                <FormControlLabel control={
+                  <Switch checked={form.allowNotesForUsers} onChange={(e) => setForm((p) => ({ ...p, allowNotesForUsers: e.target.checked }))} />
+                } label="Show notes to assigned users" />
 
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 6 }}>
-                <TextField fullWidth size="small" label="Category" placeholder="e.g. AWS, GitHub"
-                  value={form.category} onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))} />
-              </Grid>
-              <Grid size={{ xs: 6 }}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Environment</InputLabel>
-                  <Select label="Environment" value={form.environment} onChange={(e) => setForm((p) => ({ ...p, environment: e.target.value }))}>
-                    {ENVIRONMENTS.map((e) => <MenuItem key={e} value={e}>{e}</MenuItem>)}
-                  </Select>
-                </FormControl>
-              </Grid>
-            </Grid>
-
-            <TextField fullWidth multiline rows={2} label="Notes (optional)" value={form.notes}
-              onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} />
-
-            <Divider />
-            <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>ASSOCIATE WITH (OPTIONAL)</Typography>
-            <FormControl fullWidth size="small">
-              <InputLabel>Web Resource</InputLabel>
-              <Select label="Web Resource" value={form.resourceId}
-                onChange={(e) => setForm((p) => ({ ...p, resourceId: e.target.value, awsResourceId: "", credentialId: "" }))}>
-                <MenuItem value=""><em>None</em></MenuItem>
-                {orgResources.map((r: any) => <MenuItem key={r.id} value={r.id}>{r.name} ({r.environment})</MenuItem>)}
-              </Select>
-            </FormControl>
-            <FormControl fullWidth size="small">
-              <InputLabel>AWS Resource</InputLabel>
-              <Select label="AWS Resource" value={form.awsResourceId}
-                onChange={(e) => setForm((p) => ({ ...p, awsResourceId: e.target.value, resourceId: "", credentialId: "" }))}>
-                <MenuItem value=""><em>None</em></MenuItem>
-                {orgAwsResources.map((r: any) => <MenuItem key={r.id} value={r.id}>{r.name} ({r.environment})</MenuItem>)}
-              </Select>
-            </FormControl>
-            <FormControl fullWidth size="small">
-              <InputLabel>Credential</InputLabel>
-              <Select label="Credential" value={form.credentialId}
-                onChange={(e) => setForm((p) => ({ ...p, credentialId: e.target.value, resourceId: "", awsResourceId: "" }))}>
-                <MenuItem value=""><em>None</em></MenuItem>
-                {orgCredentials.map((c: any) => <MenuItem key={c.id} value={c.id}>{c.appName}{c.username ? ` — ${c.username}` : ""}</MenuItem>)}
-              </Select>
-            </FormControl>
-
-            <FormControlLabel control={
-              <Switch checked={form.allowNotesForUsers} onChange={(e) => setForm((p) => ({ ...p, allowNotesForUsers: e.target.checked }))} />
-            } label="Show notes to assigned users" />
-
-            {editEntry && (
-              <FormControl fullWidth size="small">
-                <InputLabel>Status</InputLabel>
-                <Select label="Status" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
-                  <MenuItem value="active">Active</MenuItem>
-                  <MenuItem value="disabled">Disabled</MenuItem>
-                </Select>
-              </FormControl>
+                {editEntry && (
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Status</InputLabel>
+                    <Select label="Status" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
+                      <MenuItem value="active">Active</MenuItem>
+                      <MenuItem value="disabled">Disabled</MenuItem>
+                    </Select>
+                  </FormControl>
+                )}
+              </>
             )}
           </Stack>
         </DialogContent>
@@ -1257,6 +1282,40 @@ export default function TwoFactorVaultPanel({
                 </FormControl>
               </Grid>
             </Grid>
+
+            <TextField fullWidth size="small" multiline rows={2} label="Notes (optional)"
+              value={migrationNotes} onChange={(e) => setMigrationNotes(e.target.value)} />
+
+            <Divider />
+            <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary" }}>ASSOCIATE WITH (OPTIONAL)</Typography>
+            <FormControl fullWidth size="small">
+              <InputLabel>Web Resource</InputLabel>
+              <Select label="Web Resource" value={migrationResourceId}
+                onChange={(e) => { setMigrationResourceId(e.target.value); setMigrationAwsResourceId(""); setMigrationCredentialId(""); }}>
+                <MenuItem value=""><em>None</em></MenuItem>
+                {orgResources.map((r: any) => <MenuItem key={r.id} value={r.id}>{r.name} ({r.environment})</MenuItem>)}
+              </Select>
+            </FormControl>
+            <FormControl fullWidth size="small">
+              <InputLabel>AWS Resource</InputLabel>
+              <Select label="AWS Resource" value={migrationAwsResourceId}
+                onChange={(e) => { setMigrationAwsResourceId(e.target.value); setMigrationResourceId(""); setMigrationCredentialId(""); }}>
+                <MenuItem value=""><em>None</em></MenuItem>
+                {orgAwsResources.map((r: any) => <MenuItem key={r.id} value={r.id}>{r.name} ({r.environment})</MenuItem>)}
+              </Select>
+            </FormControl>
+            <FormControl fullWidth size="small">
+              <InputLabel>Credential</InputLabel>
+              <Select label="Credential" value={migrationCredentialId}
+                onChange={(e) => { setMigrationCredentialId(e.target.value); setMigrationResourceId(""); setMigrationAwsResourceId(""); }}>
+                <MenuItem value=""><em>None</em></MenuItem>
+                {orgCredentials.map((c: any) => <MenuItem key={c.id} value={c.id}>{c.appName}{c.username ? ` — ${c.username}` : ""}</MenuItem>)}
+              </Select>
+            </FormControl>
+
+            <FormControlLabel control={
+              <Switch checked={migrationAllowNotes} onChange={(e) => setMigrationAllowNotes(e.target.checked)} />
+            } label="Show notes to assigned users" />
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 3, display: "flex", justifyContent: "space-between" }}>

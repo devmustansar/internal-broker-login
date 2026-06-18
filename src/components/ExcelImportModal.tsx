@@ -78,11 +78,11 @@ export default function ExcelImportModal({
     if (rawRows.length === 0) return;
     setEditableRows(
       rawRows.map(row => ({
-        appName: (mapping.appName ? row[mapping.appName] : "") ?? "",
-        username: (mapping.username ? row[mapping.username] : "") ?? "",
-        password: (mapping.password ? row[mapping.password] : "") ?? "",
-        loginUrl: (mapping.loginUrl ? row[mapping.loginUrl] : "") ?? "",
-        description: (mapping.description ? row[mapping.description] : "") ?? "",
+        appName: String(mapping.appName ? row[mapping.appName] ?? "" : ""),
+        username: String(mapping.username ? row[mapping.username] ?? "" : ""),
+        password: String(mapping.password ? row[mapping.password] ?? "" : ""),
+        loginUrl: String(mapping.loginUrl ? row[mapping.loginUrl] ?? "" : ""),
+        description: String(mapping.description ? row[mapping.description] ?? "" : ""),
       }))
     );
     setEditingIdx(null);
