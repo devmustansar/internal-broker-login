@@ -1,16 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
-  Box, 
-  Container, 
-  Typography, 
-  TextField, 
-  Button, 
-  Paper, 
-  Grid, 
-  Stack, 
-  Tabs, 
+import {
+  Box,
+  Container,
+  Typography,
+  TextField,
+  Button,
+  Paper,
+  Grid,
+  Stack,
+  Tabs,
   Tab,
   Select,
   MenuItem,
@@ -45,7 +45,7 @@ import { useApp } from "@/lib/app-context";
 import AdminResourcesList from "@/components/AdminResourcesList";
 import CredentialVaultPanel from "@/components/CredentialVaultPanel";
 import TwoFactorVaultPanel from "@/components/TwoFactorVaultPanel";
-import { 
+import {
   ShieldCheck,
   Database,
   KeyRound,
@@ -75,6 +75,181 @@ import {
   Copy,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+// All managed policies that can be assigned to AWS resources.
+// Must stay in sync with MANAGED_POLICY_INLINE_MAP in aws-federation.service.ts.
+// const ALL_KNOWN_POLICY_ARNS: { arn: string; label: string; group: string }[] = [
+//   // Full access
+//   { arn: "arn:aws:iam::aws:policy/AdministratorAccess",     label: "AdministratorAccess",     group: "Full Access" },
+//   { arn: "arn:aws:iam::aws:policy/PowerUserAccess",         label: "PowerUserAccess",         group: "Full Access" },
+//   // Read-only / audit
+//   { arn: "arn:aws:iam::aws:policy/ReadOnlyAccess",          label: "ReadOnlyAccess",          group: "Read-Only / Audit" },
+//   { arn: "arn:aws:iam::aws:policy/ViewOnlyAccess",          label: "ViewOnlyAccess",          group: "Read-Only / Audit" },
+//   { arn: "arn:aws:iam::aws:policy/SecurityAudit",           label: "SecurityAudit",           group: "Read-Only / Audit" },
+//   // S3
+//   { arn: "arn:aws:iam::aws:policy/AmazonS3FullAccess",      label: "AmazonS3FullAccess",      group: "S3" },
+//   { arn: "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",  label: "AmazonS3ReadOnlyAccess",  group: "S3" },
+//   // EC2
+//   { arn: "arn:aws:iam::aws:policy/AmazonEC2FullAccess",     label: "AmazonEC2FullAccess",     group: "EC2" },
+//   { arn: "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess", label: "AmazonEC2ReadOnlyAccess", group: "EC2" },
+//   // RDS
+//   { arn: "arn:aws:iam::aws:policy/AmazonRDSFullAccess",     label: "AmazonRDSFullAccess",     group: "RDS" },
+//   // Lambda
+//   { arn: "arn:aws:iam::aws:policy/AWSLambda_FullAccess",    label: "AWSLambda_FullAccess",    group: "Lambda" },
+//   // DynamoDB
+//   { arn: "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess",label: "AmazonDynamoDBFullAccess",group: "DynamoDB" },
+//   // Job functions
+//   { arn: "arn:aws:iam::aws:policy/job-function/Billing",                 label: "Billing",                 group: "Job Functions" },
+//   { arn: "arn:aws:iam::aws:policy/job-function/DatabaseAdministrator",   label: "DatabaseAdministrator",   group: "Job Functions" },
+//   { arn: "arn:aws:iam::aws:policy/job-function/DataScientistAccess",     label: "DataScientistAccess",     group: "Job Functions" },
+//   { arn: "arn:aws:iam::aws:policy/job-function/NetworkAdministrator",    label: "NetworkAdministrator",    group: "Job Functions" },
+//   { arn: "arn:aws:iam::aws:policy/job-function/SupportUser",             label: "SupportUser",             group: "Job Functions" },
+//   { arn: "arn:aws:iam::aws:policy/job-function/SystemAdministrator",     label: "SystemAdministrator",     group: "Job Functions" },
+//   // SSO / service-linked
+//   { arn: "arn:aws:iam::aws:policy/aws-service-role/AWSSSOMemberAccountAdministrator", label: "AWSSSOMemberAccountAdministrator", group: "SSO" },
+//   { arn: "arn:aws:iam::aws:policy/aws-service-role/AWSSSODirectoryAdministrator",     label: "AWSSSODirectoryAdministrator",     group: "SSO" },
+//   { arn: "arn:aws:iam::aws:policy/aws-service-role/AWSSSOReadOnly",                   label: "AWSSSOReadOnly",                   group: "SSO" },
+// ];
+
+const ALL_KNOWN_POLICY_ARNS: { arn: string; label: string; group: string }[] = [
+  // Full access
+  { arn: "arn:aws:iam::aws:policy/AdministratorAccess", label: "AdministratorAccess", group: "Full Access" },
+  { arn: "arn:aws:iam::aws:policy/PowerUserAccess", label: "PowerUserAccess", group: "Full Access" },
+
+  // Read-only / audit
+  { arn: "arn:aws:iam::aws:policy/ReadOnlyAccess", label: "ReadOnlyAccess", group: "Read-Only / Audit" },
+  { arn: "arn:aws:iam::aws:policy/ViewOnlyAccess", label: "ViewOnlyAccess", group: "Read-Only / Audit" },
+  { arn: "arn:aws:iam::aws:policy/SecurityAudit", label: "SecurityAudit", group: "Read-Only / Audit" },
+
+  // IAM
+  { arn: "arn:aws:iam::aws:policy/IAMFullAccess", label: "IAMFullAccess", group: "IAM" },
+  { arn: "arn:aws:iam::aws:policy/IAMReadOnlyAccess", label: "IAMReadOnlyAccess", group: "IAM" },
+  { arn: "arn:aws:iam::aws:policy/IAMUserChangePassword", label: "IAMUserChangePassword", group: "IAM" },
+
+  // S3
+  { arn: "arn:aws:iam::aws:policy/AmazonS3FullAccess", label: "AmazonS3FullAccess", group: "S3" },
+  { arn: "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess", label: "AmazonS3ReadOnlyAccess", group: "S3" },
+
+  // EC2 / VPC / NAT / Load Balancing / Auto Scaling
+  { arn: "arn:aws:iam::aws:policy/AmazonEC2FullAccess", label: "AmazonEC2FullAccess", group: "EC2" },
+  { arn: "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess", label: "AmazonEC2ReadOnlyAccess", group: "EC2" },
+  { arn: "custom:aws:policy/NATGatewayFullAccess", label: "NATGatewayFullAccess", group: "Networking" },
+  { arn: "custom:aws:policy/VPCFullAccess", label: "VPCFullAccess", group: "Networking" },
+  { arn: "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess", label: "ElasticLoadBalancingFullAccess", group: "Load Balancing" },
+  { arn: "arn:aws:iam::aws:policy/ElasticLoadBalancingReadOnly", label: "ElasticLoadBalancingReadOnly", group: "Load Balancing" },
+  { arn: "arn:aws:iam::aws:policy/AutoScalingFullAccess", label: "AutoScalingFullAccess", group: "Auto Scaling" },
+  { arn: "arn:aws:iam::aws:policy/AutoScalingReadOnlyAccess", label: "AutoScalingReadOnlyAccess", group: "Auto Scaling" },
+
+  // EKS
+  { arn: "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy", label: "AmazonEKSClusterPolicy", group: "EKS" },
+  { arn: "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy", label: "AmazonEKSWorkerNodePolicy", group: "EKS" },
+  { arn: "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy", label: "AmazonEKS_CNI_Policy", group: "EKS" },
+  { arn: "arn:aws:iam::aws:policy/AmazonEKSServicePolicy", label: "AmazonEKSServicePolicy", group: "EKS" },
+
+  // ECS / ECR
+  { arn: "arn:aws:iam::aws:policy/AmazonECS_FullAccess", label: "AmazonECS_FullAccess", group: "ECS" },
+  { arn: "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess", label: "AmazonEC2ContainerRegistryFullAccess", group: "ECR" },
+  { arn: "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly", label: "AmazonEC2ContainerRegistryReadOnly", group: "ECR" },
+  { arn: "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser", label: "AmazonEC2ContainerRegistryPowerUser", group: "ECR" },
+
+  // RDS / Aurora
+  { arn: "arn:aws:iam::aws:policy/AmazonRDSFullAccess", label: "AmazonRDSFullAccess", group: "RDS" },
+  { arn: "arn:aws:iam::aws:policy/AmazonRDSReadOnlyAccess", label: "AmazonRDSReadOnlyAccess", group: "RDS" },
+
+  // Lambda
+  { arn: "arn:aws:iam::aws:policy/AWSLambda_FullAccess", label: "AWSLambda_FullAccess", group: "Lambda" },
+  { arn: "arn:aws:iam::aws:policy/AWSLambda_ReadOnlyAccess", label: "AWSLambda_ReadOnlyAccess", group: "Lambda" },
+
+  // DynamoDB
+  { arn: "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess", label: "AmazonDynamoDBFullAccess", group: "DynamoDB" },
+  { arn: "arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess", label: "AmazonDynamoDBReadOnlyAccess", group: "DynamoDB" },
+
+  // CloudWatch / Logs
+  { arn: "arn:aws:iam::aws:policy/CloudWatchFullAccess", label: "CloudWatchFullAccess", group: "CloudWatch" },
+  { arn: "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess", label: "CloudWatchReadOnlyAccess", group: "CloudWatch" },
+  { arn: "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess", label: "CloudWatchLogsFullAccess", group: "CloudWatch Logs" },
+  { arn: "arn:aws:iam::aws:policy/CloudWatchLogsReadOnlyAccess", label: "CloudWatchLogsReadOnlyAccess", group: "CloudWatch Logs" },
+
+  // CloudTrail
+  { arn: "arn:aws:iam::aws:policy/AWSCloudTrail_FullAccess", label: "AWSCloudTrail_FullAccess", group: "CloudTrail" },
+  { arn: "arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess", label: "AWSCloudTrail_ReadOnlyAccess", group: "CloudTrail" },
+
+  // Route53
+  { arn: "arn:aws:iam::aws:policy/AmazonRoute53FullAccess", label: "AmazonRoute53FullAccess", group: "Route53" },
+  { arn: "arn:aws:iam::aws:policy/AmazonRoute53ReadOnlyAccess", label: "AmazonRoute53ReadOnlyAccess", group: "Route53" },
+
+  // CloudFront
+  { arn: "arn:aws:iam::aws:policy/CloudFrontFullAccess", label: "CloudFrontFullAccess", group: "CloudFront" },
+  { arn: "arn:aws:iam::aws:policy/CloudFrontReadOnlyAccess", label: "CloudFrontReadOnlyAccess", group: "CloudFront" },
+
+  // API Gateway
+  { arn: "arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator", label: "AmazonAPIGatewayAdministrator", group: "API Gateway" },
+  { arn: "arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess", label: "AmazonAPIGatewayInvokeFullAccess", group: "API Gateway" },
+  { arn: "arn:aws:iam::aws:policy/AmazonAPIGatewayPushToCloudWatchLogs", label: "AmazonAPIGatewayPushToCloudWatchLogs", group: "API Gateway" },
+
+  // SQS / SNS
+  { arn: "arn:aws:iam::aws:policy/AmazonSQSFullAccess", label: "AmazonSQSFullAccess", group: "SQS" },
+  { arn: "arn:aws:iam::aws:policy/AmazonSQSReadOnlyAccess", label: "AmazonSQSReadOnlyAccess", group: "SQS" },
+  { arn: "arn:aws:iam::aws:policy/AmazonSNSFullAccess", label: "AmazonSNSFullAccess", group: "SNS" },
+  { arn: "arn:aws:iam::aws:policy/AmazonSNSReadOnlyAccess", label: "AmazonSNSReadOnlyAccess", group: "SNS" },
+
+  // SSM / Secrets Manager / KMS / ACM
+  { arn: "arn:aws:iam::aws:policy/AmazonSSMFullAccess", label: "AmazonSSMFullAccess", group: "SSM" },
+  { arn: "arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess", label: "AmazonSSMReadOnlyAccess", group: "SSM" },
+  { arn: "arn:aws:iam::aws:policy/SecretsManagerReadWrite", label: "SecretsManagerReadWrite", group: "Secrets Manager" },
+  { arn: "arn:aws:iam::aws:policy/AWSKeyManagementServicePowerUser", label: "AWSKeyManagementServicePowerUser", group: "KMS" },
+  { arn: "arn:aws:iam::aws:policy/AWSCertificateManagerFullAccess", label: "AWSCertificateManagerFullAccess", group: "ACM" },
+  { arn: "arn:aws:iam::aws:policy/AWSCertificateManagerReadOnly", label: "AWSCertificateManagerReadOnly", group: "ACM" },
+
+  // CloudFormation
+  { arn: "arn:aws:iam::aws:policy/AWSCloudFormationFullAccess", label: "AWSCloudFormationFullAccess", group: "CloudFormation" },
+  { arn: "arn:aws:iam::aws:policy/AWSCloudFormationReadOnlyAccess", label: "AWSCloudFormationReadOnlyAccess", group: "CloudFormation" },
+
+  // Elastic Beanstalk
+  { arn: "arn:aws:iam::aws:policy/AWSElasticBeanstalkFullAccess", label: "AWSElasticBeanstalkFullAccess", group: "Elastic Beanstalk" },
+  { arn: "arn:aws:iam::aws:policy/AWSElasticBeanstalkReadOnly", label: "AWSElasticBeanstalkReadOnly", group: "Elastic Beanstalk" },
+
+  // ElastiCache
+  { arn: "arn:aws:iam::aws:policy/AmazonElastiCacheFullAccess", label: "AmazonElastiCacheFullAccess", group: "ElastiCache" },
+  { arn: "arn:aws:iam::aws:policy/AmazonElastiCacheReadOnlyAccess", label: "AmazonElastiCacheReadOnlyAccess", group: "ElastiCache" },
+
+  // Redshift
+  { arn: "arn:aws:iam::aws:policy/AmazonRedshiftFullAccess", label: "AmazonRedshiftFullAccess", group: "Redshift" },
+  { arn: "arn:aws:iam::aws:policy/AmazonRedshiftReadOnlyAccess", label: "AmazonRedshiftReadOnlyAccess", group: "Redshift" },
+
+  // Glue / Athena
+  { arn: "arn:aws:iam::aws:policy/AWSGlueConsoleFullAccess", label: "AWSGlueConsoleFullAccess", group: "Glue" },
+  { arn: "arn:aws:iam::aws:policy/AmazonAthenaFullAccess", label: "AmazonAthenaFullAccess", group: "Athena" },
+
+  // SageMaker
+  { arn: "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess", label: "AmazonSageMakerFullAccess", group: "SageMaker" },
+  { arn: "arn:aws:iam::aws:policy/AmazonSageMakerReadOnly", label: "AmazonSageMakerReadOnly", group: "SageMaker" },
+
+  // Cognito
+  { arn: "arn:aws:iam::aws:policy/AmazonCognitoPowerUser", label: "AmazonCognitoPowerUser", group: "Cognito" },
+  { arn: "arn:aws:iam::aws:policy/AmazonCognitoReadOnly", label: "AmazonCognitoReadOnly", group: "Cognito" },
+
+  // SES
+  { arn: "arn:aws:iam::aws:policy/AmazonSESFullAccess", label: "AmazonSESFullAccess", group: "SES" },
+  { arn: "arn:aws:iam::aws:policy/AmazonSESReadOnlyAccess", label: "AmazonSESReadOnlyAccess", group: "SES" },
+
+  // Organizations
+  { arn: "arn:aws:iam::aws:policy/AWSOrganizationsFullAccess", label: "AWSOrganizationsFullAccess", group: "Organizations" },
+  { arn: "arn:aws:iam::aws:policy/AWSOrganizationsReadOnlyAccess", label: "AWSOrganizationsReadOnlyAccess", group: "Organizations" },
+
+  // Job functions
+  { arn: "arn:aws:iam::aws:policy/job-function/Billing", label: "Billing", group: "Job Functions" },
+  { arn: "arn:aws:iam::aws:policy/job-function/DatabaseAdministrator", label: "DatabaseAdministrator", group: "Job Functions" },
+  { arn: "arn:aws:iam::aws:policy/job-function/DataScientistAccess", label: "DataScientistAccess", group: "Job Functions" },
+  { arn: "arn:aws:iam::aws:policy/job-function/NetworkAdministrator", label: "NetworkAdministrator", group: "Job Functions" },
+  { arn: "arn:aws:iam::aws:policy/job-function/SupportUser", label: "SupportUser", group: "Job Functions" },
+  { arn: "arn:aws:iam::aws:policy/job-function/SystemAdministrator", label: "SystemAdministrator", group: "Job Functions" },
+
+  // SSO / service-linked
+  { arn: "arn:aws:iam::aws:policy/aws-service-role/AWSSSOMemberAccountAdministrator", label: "AWSSSOMemberAccountAdministrator", group: "SSO" },
+  { arn: "arn:aws:iam::aws:policy/aws-service-role/AWSSSODirectoryAdministrator", label: "AWSSSODirectoryAdministrator", group: "SSO" },
+  { arn: "arn:aws:iam::aws:policy/aws-service-role/AWSSSOReadOnly", label: "AWSSSOReadOnly", group: "SSO" },
+];
 
 interface AdminActionProps {
   onSuccess: (message: string) => void;
@@ -148,7 +323,7 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
     const fetchCredentials = async () => {
       const secretRef = initialData?.accounts?.[0]?.vaultPath || `secret/apps/${initialData?.resourceKey}/admin`;
       if (!secretRef || !initialData) return;
-      
+
       try {
         const res = await fetch(`/api/admin/secrets?secretRef=${encodeURIComponent(secretRef)}&kind=web_basic_credentials`);
         if (res.ok) {
@@ -341,7 +516,7 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
             </Select>
           </FormControl>
         </Grid>
-        
+
         <Grid size={{ xs: 12, md: 6 }}>
           <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>USERNAME PAYLOAD KEY</Typography>
           <TextField
@@ -445,10 +620,10 @@ function AppForm({ onSuccess, onError, initialData, onCancelEdit }: AdminActionP
         {/* Managed Credentials Section */}
         <Grid size={12}>
           <Divider sx={{ my: 4 }}>
-            <Chip 
-              icon={<Lock size={14} />} 
-              label="VAULTED CREDENTIALS" 
-              sx={{ fontWeight: 800, fontSize: '0.65rem', letterSpacing: '0.05em' }} 
+            <Chip
+              icon={<Lock size={14} />}
+              label="VAULTED CREDENTIALS"
+              sx={{ fontWeight: 800, fontSize: '0.65rem', letterSpacing: '0.05em' }}
             />
           </Divider>
           <Alert icon={<ShieldCheck size={20} />} severity="info" sx={{ mb: 4, borderRadius: 3, bgcolor: alpha(theme.palette.primary.main, 0.05), border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}` }}>
@@ -517,6 +692,9 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [existingAwsResources, setExistingAwsResources] = useState<any[]>([]);
   const [copySourceKey, setCopySourceKey] = useState<string>("");
+  const [detectingPolicies, setDetectingPolicies] = useState(false);
+  const [detectedPolicies, setDetectedPolicies] = useState<string[] | null>(null);
+  const [detectedCallerArn, setDetectedCallerArn] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: initialData?.name || "",
     awsAccountId: initialData?.awsAccountId || "",
@@ -526,11 +704,11 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
     issuer: initialData?.issuer || "internal-broker",
     sessionDurationSeconds: initialData?.sessionDurationSeconds || 3600,
     externalId: initialData?.externalId || "",
-    stsStrategy: initialData?.stsStrategy || "assume_role",
+    stsStrategy: initialData?.stsStrategy || "federation_token",
     environment: initialData?.environment || "production",
     description: initialData?.description || "",
     organizationId: initialData?.organizationId || "",
-    availablePolicyArns: (initialData?.availablePolicyArns || []).join('\n'),
+    availablePolicyArns: (initialData?.availablePolicyArns || []) as string[],
     sessionName: initialData?.sessionName || "",
     accessKeyId: "",
     secretAccessKey: "",
@@ -560,11 +738,11 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
       issuer: resource.issuer || "internal-broker",
       sessionDurationSeconds: resource.sessionDurationSeconds || 3600,
       externalId: resource.externalId || "",
-      stsStrategy: resource.stsStrategy || "assume_role",
+      stsStrategy: resource.stsStrategy || "federation_token",
       environment: resource.environment || "production",
       description: resource.description || "",
       organizationId: resource.organizationId || prev.organizationId,
-      availablePolicyArns: (resource.availablePolicyArns || []).join('\n'),
+      availablePolicyArns: (resource.availablePolicyArns || []) as string[],
       sessionName: resource.sessionName || "",
       // accessKeyId and secretAccessKey intentionally excluded
     }));
@@ -597,16 +775,10 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
     setLoading(true);
     try {
       const isEdit = !!initialData;
-      // Parse availablePolicyArns from string into array
-      const policyArnsArray = formData.availablePolicyArns
-        .split(/[\n,]+/)
-        .map((p: string) => p.trim())
-        .filter((p: string) => p.length > 0);
-
       const { accessKeyId, secretAccessKey, ...resourceFields } = formData;
       const payload = isEdit
-        ? { id: initialData.id, resourceKey: initialData.resourceKey, ...resourceFields, availablePolicyArns: policyArnsArray }
-        : { ...resourceFields, availablePolicyArns: policyArnsArray };
+        ? { id: initialData.id, resourceKey: initialData.resourceKey, ...resourceFields }
+        : { ...resourceFields };
 
       const res = await fetch("/api/admin/aws/resources", {
         method: isEdit ? "PUT" : "POST",
@@ -632,7 +804,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
       }
 
       onSuccess(`AWS Resource "${data.name}" ${isEdit ? "updated" : "created"} successfully!`);
-      
+
       if (!isEdit) {
         setFormData({
           name: "",
@@ -643,11 +815,11 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
           issuer: "internal-broker",
           sessionDurationSeconds: 3600,
           externalId: "",
-          stsStrategy: "assume_role",
+          stsStrategy: "federation_token",
           environment: "production",
           description: "",
           organizationId: "",
-          availablePolicyArns: "",
+          availablePolicyArns: [] as string[],
           sessionName: "",
           accessKeyId: "",
           secretAccessKey: "",
@@ -744,18 +916,26 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
             sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
           />
         </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>IAM ROLE ARN</Typography>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="arn:aws:iam::..."
-            value={formData.roleArn}
-            onChange={(e) => setFormData({ ...formData, roleArn: e.target.value })}
-            required
-            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
-          />
-        </Grid>
+        {formData.stsStrategy === "assume_role" && (
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>IAM ROLE ARN</Typography>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="arn:aws:iam::123456789012:role/MyRoleName"
+              value={formData.roleArn}
+              onChange={(e) => setFormData({ ...formData, roleArn: e.target.value })}
+              required
+              error={formData.roleArn.includes(":user/")}
+              helperText={
+                formData.roleArn.includes(":user/")
+                  ? "This looks like an IAM user ARN. AssumeRole requires a role ARN — change \":user/\" to \":role/\", or switch STS Strategy to \"Federation Token\"."
+                  : "Must be a role ARN: arn:aws:iam::ACCOUNT:role/ROLE_NAME"
+              }
+              sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+            />
+          </Grid>
+        )}
         <Grid size={{ xs: 12, md: 6 }}>
           <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>REGION</Typography>
           <TextField
@@ -778,6 +958,14 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
               <MenuItem value="federation_token">Federation Token (Identity)</MenuItem>
             </Select>
           </FormControl>
+          {formData.stsStrategy === "federation_token" && (
+            <Box sx={{ mt: 1, px: 1.5, py: 1, bgcolor: "info.main", opacity: 0.85, borderRadius: 2 }}>
+              <Typography variant="caption" sx={{ color: "info.contrastText", fontWeight: 600, display: "block" }}>
+                Federation Token mode: the broker IAM user's own credentials are used directly — no role ARN needed.
+                The broker user must have <code style={{ fontSize: "0.7rem" }}>sts:GetFederationToken</code> permission and must use long-term (non-temporary) credentials.
+              </Typography>
+            </Box>
+          )}
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
           <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>SESSION NAME</Typography>
@@ -806,10 +994,10 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
         {/* IAM Credentials Section */}
         <Grid size={12}>
           <Divider sx={{ my: 4 }}>
-            <Chip 
-              icon={<ShieldCheck size={14} />} 
-              label="IAM BROKER CREDENTIALS" 
-              sx={{ fontWeight: 800, fontSize: '0.65rem', letterSpacing: '0.05em' }} 
+            <Chip
+              icon={<ShieldCheck size={14} />}
+              label="IAM BROKER CREDENTIALS"
+              sx={{ fontWeight: 800, fontSize: '0.65rem', letterSpacing: '0.05em' }}
             />
           </Divider>
         </Grid>
@@ -821,7 +1009,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
             variant="outlined"
             placeholder="AKIA..."
             value={formData.accessKeyId}
-            onChange={(e) => setFormData({ ...formData, accessKeyId: e.target.value })}
+            onChange={(e) => { setFormData({ ...formData, accessKeyId: e.target.value }); setDetectedPolicies(null); setDetectedCallerArn(null); }}
             sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
           />
         </Grid>
@@ -833,7 +1021,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
             variant="outlined"
             placeholder="••••••••••••"
             value={formData.secretAccessKey}
-            onChange={(e) => setFormData({ ...formData, secretAccessKey: e.target.value })}
+            onChange={(e) => { setFormData({ ...formData, secretAccessKey: e.target.value }); setDetectedPolicies(null); setDetectedCallerArn(null); }}
             sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
           />
         </Grid>
@@ -849,18 +1037,110 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
           />
         </Grid>
         <Grid size={12}>
-          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>AVAILABLE POLICY ARNS (One per line)</Typography>
-          <TextField
-            fullWidth
-            multiline
-            rows={4}
-            variant="outlined"
-            placeholder="arn:aws:iam::aws:policy/ReadOnlyAccess&#10;arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
-            value={formData.availablePolicyArns}
-            onChange={(e) => setFormData({ ...formData, availablePolicyArns: e.target.value })}
-            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
-            helperText="Specify IAM managed policy ARNs that admins can assign to users for this resource."
-          />
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>
+                AVAILABLE POLICIES
+              </Typography>
+              {detectedCallerArn && (
+                <Typography variant="caption" sx={{ ml: 1.5, color: 'success.main', fontFamily: 'monospace', fontSize: '0.65rem' }}>
+                  {detectedCallerArn}
+                </Typography>
+              )}
+            </Box>
+            <Button
+              type="button"
+              size="small"
+              variant="outlined"
+              disabled={detectingPolicies || (!formData.accessKeyId && !formData.secretAccessKey && !initialData?.resourceKey)}
+              onClick={async () => {
+                setDetectingPolicies(true);
+                const usingStoredKeys = !formData.accessKeyId && !formData.secretAccessKey && !!initialData?.resourceKey;
+                try {
+                  const res = await fetch("/api/admin/aws/policies", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(
+                      usingStoredKeys
+                        ? { resourceKey: initialData.resourceKey, region: formData.region || "us-east-1" }
+                        : { accessKeyId: formData.accessKeyId, secretAccessKey: formData.secretAccessKey, region: formData.region || "us-east-1" }
+                    ),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.error || "Failed to detect policies");
+                  const detected: string[] = data.policyArns ?? [];
+                  setDetectedPolicies(detected);
+                  setDetectedCallerArn(data.callerArn ?? null);
+                  // Auto-select all detected policies (replacing previous selection)
+                  if (detected.length > 0) {
+                    setFormData((prev) => ({ ...prev, availablePolicyArns: detected }));
+                  } else {
+                    onError("No managed policies found on these credentials.");
+                  }
+                } catch (err: any) {
+                  onError(err.message);
+                } finally {
+                  setDetectingPolicies(false);
+                }
+              }}
+              startIcon={detectingPolicies ? <CircularProgress size={12} /> : <Search size={13} />}
+              sx={{ borderRadius: 2, fontWeight: 700, fontSize: '0.7rem', textTransform: 'none', whiteSpace: 'nowrap' }}
+            >
+              {detectingPolicies
+                ? "Detecting…"
+                : detectedPolicies
+                  ? "Re-detect"
+                  : (!formData.accessKeyId && !formData.secretAccessKey && initialData?.resourceKey)
+                    ? "Detect from Stored Keys"
+                    : "Detect from Keys"}
+            </Button>
+          </Stack>
+          {(() => {
+            // What to show in the checklist:
+            // 1. After detection → detected policies only
+            // 2. Edit mode, no detection yet → saved policies on this resource
+            // 3. New resource, no detection yet → empty (prompt to detect)
+            const listPolicies: string[] =
+              detectedPolicies ??
+              (initialData?.availablePolicyArns?.length > 0 ? initialData.availablePolicyArns : []);
+
+            const hasKeys = formData.accessKeyId || formData.secretAccessKey || initialData?.resourceKey;
+
+            if (listPolicies.length === 0) {
+              return (
+                <Box sx={{ border: `1px dashed ${theme.palette.divider}`, borderRadius: 3, p: 3, textAlign: "center" }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 600, mb: 0.5 }}>
+                    No policies to show yet
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {hasKeys
+                      ? "Click \"Detect from Keys\" above to load the policies accessible with these credentials."
+                      : "Enter credentials above and click \"Detect from Keys\" to load accessible policies."}
+                  </Typography>
+                </Box>
+              );
+            }
+
+            return (
+              <>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+                  {detectedPolicies
+                    ? `${detectedPolicies.length} polic${detectedPolicies.length !== 1 ? "ies" : "y"} detected from credentials — check the ones to make available for user assignment.`
+                    : `${listPolicies.length} polic${listPolicies.length !== 1 ? "ies" : "y"} saved on this resource. Click "Re-detect" to refresh from current credentials.`}
+                </Typography>
+                <PolicyChecklist
+                  availablePolicies={listPolicies}
+                  selected={formData.availablePolicyArns}
+                  onChange={(next) => setFormData({ ...formData, availablePolicyArns: next })}
+                />
+                {formData.availablePolicyArns.length > 0 && (
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: "block" }}>
+                    {formData.availablePolicyArns.length} polic{formData.availablePolicyArns.length !== 1 ? "ies" : "y"} selected
+                  </Typography>
+                )}
+              </>
+            );
+          })()}
         </Grid>
 
         <Grid size={12}>
@@ -1410,39 +1690,136 @@ function PolicyChecklist({
   onChange: (next: string[]) => void;
 }) {
   const theme = useTheme();
+  const [query, setQuery] = useState("");
+
+  const q = query.toLowerCase().trim();
+  const visible = availablePolicies.filter((arn) => {
+    if (!q) return true;
+    const label = arn.split("/").pop()?.toLowerCase() ?? "";
+    return label.includes(q) || arn.toLowerCase().includes(q);
+  });
+
+  // Group visible entries using ALL_KNOWN_POLICY_ARNS metadata (falls back to "Other" for custom ARNs)
+  const grouped: { group: string; arns: string[] }[] = [];
+  const seen = new Set<string>();
+  for (const arn of visible) {
+    const meta = ALL_KNOWN_POLICY_ARNS.find((p) => p.arn === arn);
+    const group = meta?.group ?? "Custom";
+    const existing = grouped.find((g) => g.group === group);
+    if (existing) { existing.arns.push(arn); } else { grouped.push({ group, arns: [arn] }); }
+    seen.add(arn);
+  }
+
+  const allVisibleSelected = visible.length > 0 && visible.every((a) => selected.includes(a));
+  const someVisibleSelected = visible.some((a) => selected.includes(a));
+
+  const toggleAll = () => {
+    if (allVisibleSelected) {
+      onChange(selected.filter((a) => !visible.includes(a)));
+    } else {
+      onChange([...new Set([...selected, ...visible])]);
+    }
+  };
+
   return (
-    <Paper
-      variant="outlined"
-      sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 3, overflow: "hidden", maxHeight: 260, overflowY: "auto" }}
-    >
-      {availablePolicies.map((arn) => {
-        const checked = selected.includes(arn);
-        return (
+    <Box>
+      <TextField
+        fullWidth
+        size="small"
+        placeholder="Search policies…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start"><Search size={14} color={theme.palette.text.secondary} /></InputAdornment>
+          ),
+          endAdornment: query ? (
+            <InputAdornment position="end">
+              <IconButton size="small" onClick={() => setQuery("")} sx={{ p: 0.25 }}>
+                <X size={13} />
+              </IconButton>
+            </InputAdornment>
+          ) : null,
+        }}
+        sx={{ mb: 1, "& .MuiInputBase-root": { borderRadius: 2 } }}
+      />
+
+      <Paper
+        variant="outlined"
+        sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 3, overflow: "hidden", maxHeight: 280, overflowY: "auto" }}
+      >
+        {/* Select-all row */}
+        {visible.length > 0 && (
           <Box
-            key={arn}
-            onClick={() => onChange(checked ? selected.filter((a) => a !== arn) : [...selected, arn])}
+            onClick={toggleAll}
             sx={{
-              display: "flex", alignItems: "center", px: 2, py: 1.5, gap: 1.5, cursor: "pointer",
+              display: "flex", alignItems: "center", px: 2, py: 1, gap: 1.5, cursor: "pointer",
               borderBottom: `1px solid ${theme.palette.divider}`,
-              bgcolor: checked ? alpha(theme.palette.warning.main, 0.05) : "transparent",
-              "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.04) },
-              "&:last-child": { borderBottom: "none" },
-              transition: "background-color 0.15s ease",
+              bgcolor: alpha(theme.palette.primary.main, 0.03),
+              "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.06) },
             }}
           >
-            <Checkbox checked={checked} size="small" color="warning" sx={{ p: 0 }} />
-            <Box flex={1} minWidth={0}>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: checked ? "warning.main" : "text.primary" }}>
-                {arn.split("/").pop()}
-              </Typography>
-              <Typography variant="caption" sx={{ color: "text.secondary", fontFamily: "monospace", fontSize: "0.65rem", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {arn}
+            <Checkbox
+              checked={allVisibleSelected}
+              indeterminate={someVisibleSelected && !allVisibleSelected}
+              size="small"
+              color="warning"
+              sx={{ p: 0 }}
+            />
+            <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary", fontSize: "0.7rem" }}>
+              {allVisibleSelected ? "Deselect all" : `Select all${q ? " matching" : ""}`}
+              {" "}
+              <span style={{ opacity: 0.6 }}>({visible.length})</span>
+            </Typography>
+          </Box>
+        )}
+
+        {visible.length === 0 && (
+          <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
+            <Typography variant="caption" color="text.secondary">No policies match "{query}"</Typography>
+          </Box>
+        )}
+
+        {grouped.map(({ group, arns }) => (
+          <Box key={group}>
+            {/* Group header */}
+            <Box sx={{ px: 2, py: 0.6, bgcolor: alpha(theme.palette.background.default, 0.6), borderBottom: `1px solid ${theme.palette.divider}` }}>
+              <Typography variant="caption" sx={{ fontWeight: 800, fontSize: "0.6rem", color: "text.secondary", letterSpacing: "0.08em" }}>
+                {group.toUpperCase()}
               </Typography>
             </Box>
+
+            {arns.map((arn, idx) => {
+              const checked = selected.includes(arn);
+              const label = arn.split("/").pop() ?? arn;
+              return (
+                <Box
+                  key={arn}
+                  onClick={() => onChange(checked ? selected.filter((a) => a !== arn) : [...selected, arn])}
+                  sx={{
+                    display: "flex", alignItems: "center", px: 2, py: 1.25, gap: 1.5, cursor: "pointer",
+                    borderBottom: idx < arns.length - 1 ? `1px solid ${theme.palette.divider}` : "none",
+                    bgcolor: checked ? alpha(theme.palette.warning.main, 0.05) : "transparent",
+                    "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.04) },
+                    transition: "background-color 0.12s ease",
+                  }}
+                >
+                  <Checkbox checked={checked} size="small" color="warning" sx={{ p: 0 }} />
+                  <Box flex={1} minWidth={0}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem", color: checked ? "warning.main" : "text.primary" }}>
+                      {label}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: "text.secondary", fontFamily: "monospace", fontSize: "0.62rem", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {arn}
+                    </Typography>
+                  </Box>
+                </Box>
+              );
+            })}
           </Box>
-        );
-      })}
-    </Paper>
+        ))}
+      </Paper>
+    </Box>
   );
 }
 
@@ -1603,7 +1980,7 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
     const term = searchQuery.toLowerCase();
     return u.name?.toLowerCase().includes(term) || u.email?.toLowerCase().includes(term);
   });
-  
+
   const paginatedUsers = filteredUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   const handleAddUserSuccess = (msg: string) => {
@@ -1626,9 +2003,9 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
           }}
           sx={{ width: 300, '& .MuiOutlinedInput-root': { borderRadius: 3 } }}
         />
-        <Button 
-          variant="contained" 
-          startIcon={<Plus size={16} />} 
+        <Button
+          variant="contained"
+          startIcon={<Plus size={16} />}
           onClick={() => setIsAddUserOpen(true)}
           sx={{ borderRadius: 3, fontWeight: 700 }}
         >
@@ -1979,19 +2356,19 @@ function AuditLogsPanel() {
   const { user } = useApp();
 
   // Filters
-  const [filterUser, setFilterUser]     = useState("");
-  const [filterOrg, setFilterOrg]       = useState("");
+  const [filterUser, setFilterUser] = useState("");
+  const [filterOrg, setFilterOrg] = useState("");
   const [filterAction, setFilterAction] = useState("");
   const [filterOutcome, setFilterOutcome] = useState("");
   const [filterResource, setFilterResource] = useState("");
-  const [filterFrom, setFilterFrom]     = useState("");
-  const [filterTo, setFilterTo]         = useState("");
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
 
   // Data
-  const [logs, setLogs]       = useState<any[]>([]);
-  const [total, setTotal]     = useState(0);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   // Pagination
@@ -2003,7 +2380,7 @@ function AuditLogsPanel() {
 
   useEffect(() => {
     if (user?.role === "super_admin") {
-      fetch("/api/admin/organizations").then(r => r.json()).then(setOrganizations).catch(() => {});
+      fetch("/api/admin/organizations").then(r => r.json()).then(setOrganizations).catch(() => { });
     }
   }, [user]);
 
@@ -2014,14 +2391,14 @@ function AuditLogsPanel() {
     if (resetPage) setPage(0);
 
     const params = new URLSearchParams();
-    if (filterUser)     params.set("userId",         filterUser);
-    if (filterOrg)      params.set("organizationId", filterOrg);
-    if (filterAction)   params.set("action",         filterAction);
-    if (filterOutcome)  params.set("outcome",        filterOutcome);
-    if (filterResource) params.set("resourceKey",    filterResource);
-    if (filterFrom)     params.set("dateFrom",       new Date(filterFrom).toISOString());
-    if (filterTo)       params.set("dateTo",         new Date(filterTo).toISOString());
-    params.set("limit",  String(PAGE_SIZE));
+    if (filterUser) params.set("userId", filterUser);
+    if (filterOrg) params.set("organizationId", filterOrg);
+    if (filterAction) params.set("action", filterAction);
+    if (filterOutcome) params.set("outcome", filterOutcome);
+    if (filterResource) params.set("resourceKey", filterResource);
+    if (filterFrom) params.set("dateFrom", new Date(filterFrom).toISOString());
+    if (filterTo) params.set("dateTo", new Date(filterTo).toISOString());
+    params.set("limit", String(PAGE_SIZE));
     params.set("offset", String(currentPage * PAGE_SIZE));
 
     try {
@@ -2232,7 +2609,8 @@ function AuditLogsPanel() {
                       label={log.action}
                       size="small"
                       variant="outlined"
-                      sx={{ fontSize: '0.6rem', fontWeight: 800, height: 20, letterSpacing: '0.03em', border: 'none',
+                      sx={{
+                        fontSize: '0.6rem', fontWeight: 800, height: 20, letterSpacing: '0.03em', border: 'none',
                         bgcolor: log.action.startsWith('aws_') ? alpha(theme.palette.warning.main, 0.08) : alpha(theme.palette.primary.main, 0.06),
                         color: log.action.startsWith('aws_') ? theme.palette.warning.main : theme.palette.primary.main,
                       }}
@@ -2351,13 +2729,13 @@ export default function AdminPanel() {
           </Typography>
           <Typography variant="subtitle1" sx={{ mt: 1 }}>Provision connectivity endpoints and manage access controls.</Typography>
         </Box>
-        
-        <Tabs 
-          value={activeTab} 
+
+        <Tabs
+          value={activeTab}
           onChange={(_, v) => setActiveTab(v)}
           variant="scrollable"
           scrollButtons="auto"
-          sx={{ 
+          sx={{
             '& .MuiTabs-indicator': { height: 4, borderRadius: '4px 4px 0 0' },
             '& .MuiTab-root': { fontWeight: 800, fontSize: '0.7rem', letterSpacing: '0.05em', px: 2, minWidth: 'auto' }
           }}
@@ -2379,8 +2757,8 @@ export default function AdminPanel() {
             animate={{ opacity: 1, height: "auto", marginBottom: 32 }}
             exit={{ opacity: 0, height: 0, marginBottom: 0 }}
           >
-            <Alert 
-              severity={message.type} 
+            <Alert
+              severity={message.type}
               variant="outlined"
               icon={message.type === 'success' ? <ShieldCheck size={20} /> : <AlertCircle size={20} />}
               sx={{ borderRadius: 4, fontWeight: 700, bgcolor: alpha(message.type === 'success' ? theme.palette.success.main : theme.palette.error.main, 0.05) }}
@@ -2391,12 +2769,12 @@ export default function AdminPanel() {
         )}
       </AnimatePresence>
 
-      <Paper 
-        elevation={1} 
-        sx={{ 
-          p: { xs: 4, md: 6 }, 
-          borderRadius: 8, 
-          position: 'relative', 
+      <Paper
+        elevation={1}
+        sx={{
+          p: { xs: 4, md: 6 },
+          borderRadius: 8,
+          position: 'relative',
           overflow: 'hidden',
           backgroundColor: alpha(theme.palette.background.paper, 0.4),
           backdropFilter: 'blur(20px)',
@@ -2412,8 +2790,8 @@ export default function AdminPanel() {
                 NEW HANDSHAKE TOPOLOGY
               </Typography>
 
-              <Tabs 
-                value={appTypeToggle} 
+              <Tabs
+                value={appTypeToggle}
                 onChange={(_, v) => setAppTypeToggle(v)}
                 sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, py: 1, borderRadius: 2 } }}
               >

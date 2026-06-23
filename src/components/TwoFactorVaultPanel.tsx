@@ -10,7 +10,7 @@ import {
 } from "@mui/material";
 import {
   Plus, X, Lock, Users, Search, Upload, ShieldCheck, Eye, EyeOff,
-  RefreshCw, QrCode, Link2, KeyRound, Clock, ClipboardList, FileStack,
+  RefreshCw, QrCode, Link2, KeyRound, Clock, ClipboardList, FileStack, Camera,
 } from "lucide-react";
 import { useApp } from "@/lib/app-context";
 
@@ -55,13 +55,20 @@ export default function TwoFactorVaultPanel({
   // Add / Edit dialog
   const [openForm, setOpenForm] = useState(false);
   const [editEntry, setEditEntry] = useState<any>(null);
-  const [inputMode, setInputMode] = useState<"manual" | "uri" | "qr">("qr");
+  const [inputMode, setInputMode] = useState<"scan" | "qr" | "manual" | "uri">("scan");
   const [qrParsed, setQrParsed] = useState(false);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [showSecret, setShowSecret] = useState(false);
   const [savingForm, setSavingForm] = useState(false);
   const [qrParsing, setQrParsing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Camera scan
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const scanLoopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Manage dialog
   const [manageEntry, setManageEntry] = useState<any>(null);
@@ -190,11 +197,168 @@ export default function TwoFactorVaultPanel({
     setAssocTarget(null);
   }, [manageEntry?.id]);
 
+  // ── Camera scan helpers ──────────────────────────────────────────────────
+  const stopScan = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (scanLoopRef.current) { clearTimeout(scanLoopRef.current); scanLoopRef.current = null; }
+  };
+
+  // Shared: apply parsed QR data to form (or open migration dialog)
+  const applyQrData = (data: any) => {
+    if (data.type === "migration") {
+      setMigrationEntries(data.entries);
+      setMigrationSkipped(data.skippedHotp ?? 0);
+      setMigrationSelected(new Set(data.entries.map((_: any, i: number) => i)));
+      setOpenForm(false);
+      setOpenMigration(true);
+      return;
+    }
+    setForm((prev) => ({
+      ...prev,
+      appName: data.issuer ?? data.accountLabel ?? prev.appName,
+      secret: data.secret,
+      issuer: data.issuer ?? prev.issuer,
+      accountLabel: data.accountLabel ?? prev.accountLabel,
+      algorithm: data.algorithm ?? "SHA1",
+      digits: String(data.digits ?? 6),
+      period: String(data.period ?? 30),
+    }));
+    setQrParsed(true);
+    onSuccess("QR code scanned — review fields and save.");
+  };
+
+  // Parse an otpauth://totp/ URI client-side (no server needed)
+  const applyTotpUri = (raw: string): boolean => {
+    if (!raw.startsWith("otpauth://totp/")) return false;
+    try {
+      const body = raw.slice("otpauth://totp/".length);
+      const qi = body.indexOf("?");
+      const label = (() => { try { return decodeURIComponent(qi === -1 ? body : body.slice(0, qi)); } catch { return qi === -1 ? body : body.slice(0, qi); } })();
+      const p = new URLSearchParams(qi === -1 ? "" : body.slice(qi + 1));
+      const ci = label.indexOf(":");
+      const issuer = p.get("issuer") ?? (ci !== -1 ? label.slice(0, ci).trim() : null);
+      const accountLabel = ci !== -1 ? label.slice(ci + 1).trim() : label.trim();
+      setForm((prev) => ({
+        ...prev,
+        appName: issuer ?? accountLabel ?? prev.appName,
+        secret: p.get("secret")?.toUpperCase() ?? prev.secret,
+        issuer: issuer ?? prev.issuer,
+        accountLabel: accountLabel || prev.accountLabel,
+        algorithm: p.get("algorithm")?.toUpperCase() ?? "SHA1",
+        digits: p.get("digits") ?? "6",
+        period: p.get("period") ?? "30",
+      }));
+      return true;
+    } catch { return false; }
+  };
+
+  const scheduleScanFrame = () => {
+    if (!streamRef.current) return;
+    scanLoopRef.current = setTimeout(async () => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!streamRef.current || !video || !canvas) return;
+      if (video.readyState < 2) { scheduleScanFrame(); return; }
+
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(video, 0, 0);
+
+      // Path A: BarcodeDetector (Chrome/Edge/Safari — no server round-trip)
+      if ("BarcodeDetector" in window) {
+        try {
+          const BD = (window as any).BarcodeDetector;
+          const detector = new BD({ formats: ["qr_code"] });
+          const codes: any[] = await detector.detect(canvas);
+          if (codes.length > 0) {
+            const raw: string = codes[0].rawValue;
+            if (raw.startsWith("otpauth://totp/")) {
+              stopScan();
+              applyTotpUri(raw);
+              setQrParsed(true);
+              onSuccess("QR code scanned — review fields and save.");
+            } else if (raw.startsWith("otpauth-migration://")) {
+              // migration needs server-side proto decode — send the frame
+              stopScan();
+              canvas.toBlob(async (blob) => {
+                if (!blob) return;
+                setQrParsing(true);
+                try {
+                  const fd = new FormData(); fd.append("image", blob, "scan.png");
+                  const res = await fetch("/api/admin/2fa/qr-parse", { method: "POST", body: fd });
+                  const d = await res.json();
+                  if (!res.ok) throw new Error(d.error || "Failed to decode migration QR");
+                  applyQrData(d);
+                } catch (e: any) { setCameraError(e.message); } finally { setQrParsing(false); }
+              }, "image/png");
+            } else {
+              // Unrecognised QR — keep scanning
+              scheduleScanFrame();
+            }
+            return;
+          }
+        } catch { /* BarcodeDetector error — fall through to server path */ }
+        if (streamRef.current) scheduleScanFrame();
+        return;
+      }
+
+      // Path B: send frame to server (Firefox / older browsers)
+      canvas.toBlob(async (blob) => {
+        if (!blob || !streamRef.current) return;
+        try {
+          const fd = new FormData(); fd.append("image", blob, "scan.png");
+          const res = await fetch("/api/admin/2fa/qr-parse", { method: "POST", body: fd });
+          if (res.ok) {
+            stopScan();
+            applyQrData(await res.json());
+          } else if (streamRef.current) {
+            scheduleScanFrame();
+          }
+        } catch { if (streamRef.current) scheduleScanFrame(); }
+      }, "image/jpeg", 0.8);
+    }, 500);
+  };
+
+  const startScan = async () => {
+    if (streamRef.current) return; // already running
+    setCameraError(null);
+    setCameraStarting(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {/* autoplay blocked — video will still show */});
+      }
+      scheduleScanFrame();
+    } catch (e: any) {
+      setCameraError(e.name === "NotAllowedError" ? "Camera permission denied. Allow camera access and try again." : (e.message || "Could not start camera."));
+    } finally { setCameraStarting(false); }
+  };
+
+  // Start/stop camera as mode changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (inputMode === "scan" && openForm && !editEntry) {
+      startScan();
+    } else {
+      stopScan();
+    }
+    return stopScan;
+  }, [inputMode, openForm]);
+  // ─────────────────────────────────────────────────────────────────────────
+
   const openAdd = () => {
     setEditEntry(null);
     setForm({ ...EMPTY_FORM });
-    setInputMode("qr");
+    setInputMode("scan");
     setQrParsed(false);
+    setCameraError(null);
     setShowSecret(false);
     setOpenForm(true);
   };
@@ -226,29 +390,7 @@ export default function TwoFactorVaultPanel({
       const res = await fetch("/api/admin/2fa/qr-parse", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to parse QR code");
-
-      if (data.type === "migration") {
-        setMigrationEntries(data.entries);
-        setMigrationSkipped(data.skippedHotp ?? 0);
-        setMigrationSelected(new Set(data.entries.map((_: any, i: number) => i)));
-        setOpenForm(false);
-        setOpenMigration(true);
-        return;
-      }
-
-      // Standard TOTP
-      setForm(prev => ({
-        ...prev,
-        appName: data.issuer ?? data.accountLabel ?? prev.appName,
-        secret: data.secret,
-        issuer: data.issuer ?? prev.issuer,
-        accountLabel: data.accountLabel ?? prev.accountLabel,
-        algorithm: data.algorithm ?? "SHA1",
-        digits: String(data.digits ?? 6),
-        period: String(data.period ?? 30),
-      }));
-      setQrParsed(true);
-      onSuccess("QR code parsed — review fields and save.");
+      applyQrData(data);
     } catch (e: any) { onError(e.message); } finally {
       setQrParsing(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -612,29 +754,104 @@ export default function TwoFactorVaultPanel({
           <Stack spacing={3} sx={{ mt: 1 }}>
             {!editEntry && (
               <>
-                <Stack direction="row" spacing={1}>
-                  {(["qr", "manual", "uri"] as const).map((mode) => (
-                    <Button key={mode} size="small" variant={inputMode === mode ? "contained" : "outlined"}
-                      onClick={() => setInputMode(mode)}
-                      startIcon={mode === "qr" ? <QrCode size={14} /> : mode === "manual" ? <KeyRound size={14} /> : <Link2 size={14} />}
+                {/* Mode selector — Scan first */}
+                <Stack direction="row" spacing={1} flexWrap="wrap">
+                  {([
+                    { key: "scan", label: "Scan QR",    icon: <Camera size={14} /> },
+                    { key: "qr",   label: "Upload QR",  icon: <QrCode size={14} /> },
+                    { key: "manual",label: "Manual",    icon: <KeyRound size={14} /> },
+                    { key: "uri",  label: "Paste URI",  icon: <Link2 size={14} /> },
+                  ] as const).map(({ key, label, icon }) => (
+                    <Button key={key} size="small" variant={inputMode === key ? "contained" : "outlined"}
+                      onClick={() => setInputMode(key)}
+                      startIcon={icon}
                       sx={{ borderRadius: 2, textTransform: "none" }}>
-                      {mode === "qr" ? "Upload QR" : mode === "manual" ? "Manual" : "Paste URI"}
+                      {label}
                     </Button>
                   ))}
                 </Stack>
 
-                {inputMode === "uri" && (
-                  <TextField fullWidth multiline rows={3} label="otpauth:// URI"
-                    placeholder="otpauth://totp/Issuer:account?secret=BASE32&issuer=…"
-                    onChange={(e) => handleUriPaste(e.target.value)}
-                    helperText="Paste your full otpauth URI — fields will auto-fill below." />
+                {/* ── Scan mode: live camera viewfinder ── */}
+                {inputMode === "scan" && !qrParsed && (
+                  <Box>
+                    {/* Hidden canvas for frame capture */}
+                    <canvas ref={canvasRef} style={{ display: "none" }} />
+
+                    {cameraStarting && (
+                      <Box sx={{ textAlign: "center", py: 5 }}>
+                        <CircularProgress size={36} />
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.5 }}>
+                          Starting camera…
+                        </Typography>
+                      </Box>
+                    )}
+
+                    {cameraError && (
+                      <Alert severity="error" sx={{ borderRadius: 2 }}
+                        action={
+                          <Button size="small" color="error" onClick={() => { setCameraError(null); startScan(); }}>
+                            Retry
+                          </Button>
+                        }
+                      >
+                        {cameraError}
+                      </Alert>
+                    )}
+
+                    {/* Video element always in DOM so videoRef is available; hidden while loading */}
+                    <Box sx={{
+                      position: "relative", borderRadius: 3, overflow: "hidden",
+                      bgcolor: "#000", lineHeight: 0,
+                      visibility: cameraStarting || cameraError ? "hidden" : "visible",
+                      height: cameraStarting || cameraError ? 0 : "auto",
+                    }}>
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        muted
+                        playsInline
+                        style={{ width: "100%", maxHeight: 300, objectFit: "cover", display: "block" }}
+                      />
+                      {/* Corner-bracket viewfinder overlay */}
+                      <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+                        <Box sx={{ width: 180, height: 180, position: "relative" }}>
+                          {[
+                            { top: 0, left: 0, borderTop: "3px solid", borderLeft: "3px solid", borderRadius: "4px 0 0 0" },
+                            { top: 0, right: 0, borderTop: "3px solid", borderRight: "3px solid", borderRadius: "0 4px 0 0" },
+                            { bottom: 0, left: 0, borderBottom: "3px solid", borderLeft: "3px solid", borderRadius: "0 0 0 4px" },
+                            { bottom: 0, right: 0, borderBottom: "3px solid", borderRight: "3px solid", borderRadius: "0 0 4px 0" },
+                          ].map((sx, i) => (
+                            <Box key={i} sx={{ position: "absolute", width: 28, height: 28, borderColor: "success.main", ...sx }} />
+                          ))}
+                        </Box>
+                      </Box>
+                      {/* Scanning indicator */}
+                      {qrParsing && (
+                        <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "rgba(0,0,0,0.5)" }}>
+                          <CircularProgress size={40} color="success" />
+                        </Box>
+                      )}
+                      <Box sx={{ position: "absolute", bottom: 10, left: 0, right: 0, textAlign: "center" }}>
+                        <Chip size="small" label="Scanning…" color="success" icon={<Camera size={12} />} sx={{ fontSize: "0.7rem", opacity: 0.9 }} />
+                      </Box>
+                    </Box>
+
+                    {!cameraStarting && !cameraError && (
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: "block", textAlign: "center" }}>
+                        Point your camera at a QR code — detection is automatic.
+                      </Typography>
+                    )}
+                  </Box>
                 )}
 
+                {/* ── Upload QR: file picker ── */}
                 {inputMode === "qr" && (
                   <Box>
                     <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleQrUpload} />
-                    <Button fullWidth variant="outlined" startIcon={qrParsing ? <CircularProgress size={16} /> : <Upload size={16} />}
-                      onClick={() => fileInputRef.current?.click()} disabled={qrParsing} sx={{ borderRadius: 3, py: 2, borderStyle: "dashed" }}>
+                    <Button fullWidth variant="outlined"
+                      startIcon={qrParsing ? <CircularProgress size={16} /> : <Upload size={16} />}
+                      onClick={() => fileInputRef.current?.click()} disabled={qrParsing}
+                      sx={{ borderRadius: 3, py: 2, borderStyle: "dashed" }}>
                       {qrParsing ? "Parsing…" : qrParsed ? "Re-upload QR code image" : "Click to upload QR code image"}
                     </Button>
                     <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
@@ -643,7 +860,14 @@ export default function TwoFactorVaultPanel({
                   </Box>
                 )}
 
-                {(inputMode !== "qr" || qrParsed) && (
+                {inputMode === "uri" && (
+                  <TextField fullWidth multiline rows={3} label="otpauth:// URI"
+                    placeholder="otpauth://totp/Issuer:account?secret=BASE32&issuer=…"
+                    onChange={(e) => handleUriPaste(e.target.value)}
+                    helperText="Paste your full otpauth URI — fields will auto-fill below." />
+                )}
+
+                {(inputMode === "manual" || inputMode === "uri" || qrParsed) && (
                   <Alert severity="warning" sx={{ borderRadius: 2 }}>
                     Secret is encrypted with AES-256-GCM before storage and never returned by any API.
                   </Alert>
@@ -651,8 +875,8 @@ export default function TwoFactorVaultPanel({
               </>
             )}
 
-            {/* Form fields — always visible when editing, or when not in QR mode, or after QR has been parsed */}
-            {(editEntry || inputMode !== "qr" || qrParsed) && (
+            {/* Form fields — visible when editing, or manual/uri mode, or after QR/scan parsed */}
+            {(editEntry || inputMode === "manual" || inputMode === "uri" || qrParsed) && (
               <>
                 <TextField fullWidth required label="App Name" value={form.appName}
                   onChange={(e) => setForm((p) => ({ ...p, appName: e.target.value }))} />

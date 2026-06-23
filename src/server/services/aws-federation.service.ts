@@ -16,37 +16,771 @@ import type {
 // inline Policy JSON (Allow statements) so STS + the console honour the scope.
 // Only the services declared here will be accessible in the federated session.
 
+// const MANAGED_POLICY_INLINE_MAP: Record<string, { actions: string[]; resources: string }> = {
+//   // Full access policies
+//   "arn:aws:iam::aws:policy/AdministratorAccess":        { actions: ["*"],             resources: "*" },
+//   "arn:aws:iam::aws:policy/PowerUserAccess":            { actions: ["*"],             resources: "*" },
+//   // Read-only / view-only
+//   "arn:aws:iam::aws:policy/ReadOnlyAccess":             { actions: ["*.Describe*", "*.List*", "*.Get*", "*.View*", "s3:GetObject"],  resources: "*" },
+//   "arn:aws:iam::aws:policy/ViewOnlyAccess":             { actions: ["*.Describe*", "*.List*", "*.Get*"],  resources: "*" },
+//   "arn:aws:iam::aws:policy/SecurityAudit":              { actions: ["*.Describe*", "*.List*", "*.Get*", "iam:*", "cloudtrail:*"],  resources: "*" },
+//   // S3
+//   "arn:aws:iam::aws:policy/AmazonS3FullAccess":         { actions: ["s3:*"],          resources: "*" },
+//   "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess":     { actions: ["s3:Get*", "s3:List*"],  resources: "*" },
+//   // EC2
+//   "arn:aws:iam::aws:policy/AmazonEC2FullAccess":        { actions: ["ec2:*", "elasticloadbalancing:*", "cloudwatch:*", "autoscaling:*"],  resources: "*" },
+//   "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess":    { actions: ["ec2:Describe*", "elasticloadbalancing:Describe*", "cloudwatch:Describe*", "autoscaling:Describe*"],  resources: "*" },
+//   // RDS
+//   "arn:aws:iam::aws:policy/AmazonRDSFullAccess":        { actions: ["rds:*", "ec2:*", "cloudwatch:*"],  resources: "*" },
+//   // Lambda
+//   "arn:aws:iam::aws:policy/AWSLambda_FullAccess":       { actions: ["lambda:*", "iam:PassRole"],  resources: "*" },
+//   // DynamoDB
+//   "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess":   { actions: ["dynamodb:*", "cloudwatch:*"],  resources: "*" },
+//   // Job function policies
+//   "arn:aws:iam::aws:policy/job-function/Billing":                  { actions: ["aws-portal:*", "budgets:*", "ce:*", "cur:*"],  resources: "*" },
+//   "arn:aws:iam::aws:policy/job-function/DatabaseAdministrator":    { actions: ["rds:*", "dynamodb:*", "elasticache:*", "redshift:*", "cloudwatch:*"],  resources: "*" },
+//   "arn:aws:iam::aws:policy/job-function/DataScientistAccess":      { actions: ["s3:*", "athena:*", "glue:*", "sagemaker:*", "redshift:*"],  resources: "*" },
+//   "arn:aws:iam::aws:policy/job-function/NetworkAdministrator":     { actions: ["ec2:*", "elasticloadbalancing:*", "route53:*", "vpc:*"],  resources: "*" },
+//   "arn:aws:iam::aws:policy/job-function/SupportUser":              { actions: ["support:*", "*.Describe*", "*.List*"],  resources: "*" },
+//   "arn:aws:iam::aws:policy/job-function/SystemAdministrator":      { actions: ["*"],  resources: "*" },
+//   // SSO / service-linked
+//   "arn:aws:iam::aws:policy/aws-service-role/AWSSSOMemberAccountAdministrator": { actions: ["sso:*", "organizations:*"],  resources: "*" },
+//   "arn:aws:iam::aws:policy/aws-service-role/AWSSSODirectoryAdministrator":     { actions: ["sso:*", "identitystore:*"],  resources: "*" },
+//   "arn:aws:iam::aws:policy/aws-service-role/AWSSSOReadOnly":                   { actions: ["sso:List*", "sso:Get*", "identitystore:Describe*", "identitystore:List*"],  resources: "*" },
+// };
+
 const MANAGED_POLICY_INLINE_MAP: Record<string, { actions: string[]; resources: string }> = {
   // Full access policies
-  "arn:aws:iam::aws:policy/AdministratorAccess":        { actions: ["*"],             resources: "*" },
-  "arn:aws:iam::aws:policy/PowerUserAccess":            { actions: ["*"],             resources: "*" },
+  "arn:aws:iam::aws:policy/AdministratorAccess": {
+    actions: ["*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/PowerUserAccess": {
+    actions: [
+      "*",
+      "iam:PassRole",
+    ],
+    resources: "*",
+  },
+
   // Read-only / view-only
-  "arn:aws:iam::aws:policy/ReadOnlyAccess":             { actions: ["*.Describe*", "*.List*", "*.Get*", "*.View*", "s3:GetObject"],  resources: "*" },
-  "arn:aws:iam::aws:policy/ViewOnlyAccess":             { actions: ["*.Describe*", "*.List*", "*.Get*"],  resources: "*" },
-  "arn:aws:iam::aws:policy/SecurityAudit":              { actions: ["*.Describe*", "*.List*", "*.Get*", "iam:*", "cloudtrail:*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/ReadOnlyAccess": {
+    actions: [
+      "*.Describe*",
+      "*.List*",
+      "*.Get*",
+      "*.View*",
+      "s3:GetObject",
+      "s3:ListBucket",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/ViewOnlyAccess": {
+    actions: [
+      "*.Describe*",
+      "*.List*",
+      "*.Get*",
+      "*.View*",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/SecurityAudit": {
+    actions: [
+      "*.Describe*",
+      "*.List*",
+      "*.Get*",
+      "iam:Get*",
+      "iam:List*",
+      "cloudtrail:Get*",
+      "cloudtrail:List*",
+      "cloudtrail:Describe*",
+      "config:Get*",
+      "config:List*",
+      "config:Describe*",
+      "guardduty:Get*",
+      "guardduty:List*",
+      "securityhub:Get*",
+      "securityhub:List*",
+      "inspector2:Get*",
+      "inspector2:List*",
+    ],
+    resources: "*",
+  },
+
+  // IAM
+  "arn:aws:iam::aws:policy/IAMFullAccess": {
+    actions: ["iam:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/IAMReadOnlyAccess": {
+    actions: ["iam:Get*", "iam:List*", "iam:GenerateCredentialReport", "iam:GenerateServiceLastAccessedDetails"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/IAMUserChangePassword": {
+    actions: ["iam:ChangePassword", "iam:GetAccountPasswordPolicy"],
+    resources: "*",
+  },
+
   // S3
-  "arn:aws:iam::aws:policy/AmazonS3FullAccess":         { actions: ["s3:*"],          resources: "*" },
-  "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess":     { actions: ["s3:Get*", "s3:List*"],  resources: "*" },
-  // EC2
-  "arn:aws:iam::aws:policy/AmazonEC2FullAccess":        { actions: ["ec2:*", "elasticloadbalancing:*", "cloudwatch:*", "autoscaling:*"],  resources: "*" },
-  "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess":    { actions: ["ec2:Describe*", "elasticloadbalancing:Describe*", "cloudwatch:Describe*", "autoscaling:Describe*"],  resources: "*" },
-  // RDS
-  "arn:aws:iam::aws:policy/AmazonRDSFullAccess":        { actions: ["rds:*", "ec2:*", "cloudwatch:*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/AmazonS3FullAccess": {
+    actions: ["s3:*", "s3-object-lambda:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess": {
+    actions: ["s3:Get*", "s3:List*", "s3-object-lambda:Get*", "s3-object-lambda:List*"],
+    resources: "*",
+  },
+
+  // EC2 / VPC / NAT / Security Groups / EBS
+  "arn:aws:iam::aws:policy/AmazonEC2FullAccess": {
+    actions: [
+      "ec2:*",
+      "elasticloadbalancing:*",
+      "cloudwatch:*",
+      "autoscaling:*",
+      "iam:CreateServiceLinkedRole",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess": {
+    actions: [
+      "ec2:Describe*",
+      "elasticloadbalancing:Describe*",
+      "cloudwatch:Describe*",
+      "cloudwatch:Get*",
+      "cloudwatch:List*",
+      "autoscaling:Describe*",
+    ],
+    resources: "*",
+  },
+
+  // NAT is covered by EC2 actions, but you can add your own internal pseudo-policy
+  "custom:aws:policy/NATGatewayFullAccess": {
+    actions: [
+      "ec2:CreateNatGateway",
+      "ec2:DeleteNatGateway",
+      "ec2:DescribeNatGateways",
+      "ec2:CreateRoute",
+      "ec2:ReplaceRoute",
+      "ec2:DeleteRoute",
+      "ec2:DescribeRouteTables",
+      "ec2:DescribeSubnets",
+      "ec2:DescribeVpcs",
+      "ec2:DescribeAddresses",
+      "ec2:AllocateAddress",
+      "ec2:ReleaseAddress",
+      "ec2:AssociateAddress",
+      "ec2:DisassociateAddress",
+      "ec2:CreateTags",
+      "ec2:DeleteTags",
+    ],
+    resources: "*",
+  },
+
+  // VPC / Network
+  "custom:aws:policy/VPCFullAccess": {
+    actions: [
+      "ec2:*Vpc*",
+      "ec2:*Subnet*",
+      "ec2:*Route*",
+      "ec2:*InternetGateway*",
+      "ec2:*NatGateway*",
+      "ec2:*SecurityGroup*",
+      "ec2:*NetworkAcl*",
+      "ec2:*NetworkInterface*",
+      "ec2:*Address*",
+      "ec2:Describe*",
+      "ec2:CreateTags",
+      "ec2:DeleteTags",
+    ],
+    resources: "*",
+  },
+
+  // Elastic Load Balancing
+  "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess": {
+    actions: [
+      "elasticloadbalancing:*",
+      "ec2:Describe*",
+      "cloudwatch:*",
+      "iam:CreateServiceLinkedRole",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/ElasticLoadBalancingReadOnly": {
+    actions: [
+      "elasticloadbalancing:Describe*",
+      "ec2:Describe*",
+      "cloudwatch:Get*",
+      "cloudwatch:List*",
+      "cloudwatch:Describe*",
+    ],
+    resources: "*",
+  },
+
+  // Auto Scaling
+  "arn:aws:iam::aws:policy/AutoScalingFullAccess": {
+    actions: ["autoscaling:*", "cloudwatch:*", "ec2:Describe*", "iam:CreateServiceLinkedRole"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AutoScalingReadOnlyAccess": {
+    actions: ["autoscaling:Describe*", "cloudwatch:Get*", "cloudwatch:List*", "ec2:Describe*"],
+    resources: "*",
+  },
+
+  // EKS
+  "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy": {
+    actions: [
+      "ec2:CreateNetworkInterface",
+      "ec2:DescribeInstances",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:DeleteNetworkInterface",
+      "ec2:DescribeSubnets",
+      "ec2:DescribeSecurityGroups",
+      "ec2:DescribeRouteTables",
+      "ec2:DescribeDhcpOptions",
+      "ec2:DescribeVpcs",
+      "ec2:CreateTags",
+      "eks:*",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy": {
+    actions: [
+      "ec2:DescribeInstances",
+      "ec2:DescribeInstanceTypes",
+      "ec2:DescribeRouteTables",
+      "ec2:DescribeSecurityGroups",
+      "ec2:DescribeSubnets",
+      "ec2:DescribeVolumes",
+      "ec2:DescribeVolumesModifications",
+      "ec2:DescribeVpcs",
+      "eks:DescribeCluster",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy": {
+    actions: [
+      "ec2:AssignPrivateIpAddresses",
+      "ec2:AttachNetworkInterface",
+      "ec2:CreateNetworkInterface",
+      "ec2:DeleteNetworkInterface",
+      "ec2:DescribeInstances",
+      "ec2:DescribeTags",
+      "ec2:DescribeNetworkInterfaces",
+      "ec2:DescribeInstanceTypes",
+      "ec2:DetachNetworkInterface",
+      "ec2:ModifyNetworkInterfaceAttribute",
+      "ec2:UnassignPrivateIpAddresses",
+      "ec2:CreateTags",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonEKSServicePolicy": {
+    actions: ["eks:*", "ec2:Describe*", "iam:CreateServiceLinkedRole"],
+    resources: "*",
+  },
+
+  // ECS / ECR
+  "arn:aws:iam::aws:policy/AmazonECS_FullAccess": {
+    actions: [
+      "ecs:*",
+      "ecr:*",
+      "ec2:Describe*",
+      "elasticloadbalancing:*",
+      "cloudwatch:*",
+      "logs:*",
+      "application-autoscaling:*",
+      "iam:PassRole",
+      "iam:CreateServiceLinkedRole",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess": {
+    actions: ["ecr:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly": {
+    actions: ["ecr:Get*", "ecr:Describe*", "ecr:List*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser": {
+    actions: [
+      "ecr:Get*",
+      "ecr:Describe*",
+      "ecr:List*",
+      "ecr:PutImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+      "ecr:BatchCheckLayerAvailability",
+    ],
+    resources: "*",
+  },
+
+  // RDS / Aurora
+  "arn:aws:iam::aws:policy/AmazonRDSFullAccess": {
+    actions: [
+      "rds:*",
+      "application-autoscaling:DeleteScalingPolicy",
+      "application-autoscaling:DeregisterScalableTarget",
+      "application-autoscaling:DescribeScalableTargets",
+      "application-autoscaling:DescribeScalingActivities",
+      "application-autoscaling:DescribeScalingPolicies",
+      "application-autoscaling:PutScalingPolicy",
+      "application-autoscaling:RegisterScalableTarget",
+      "cloudwatch:DescribeAlarms",
+      "cloudwatch:GetMetricStatistics",
+      "cloudwatch:PutMetricAlarm",
+      "cloudwatch:DeleteAlarms",
+      "ec2:Describe*",
+      "sns:ListSubscriptions",
+      "sns:ListTopics",
+      "sns:Publish",
+      "logs:DescribeLogStreams",
+      "logs:GetLogEvents",
+      "iam:CreateServiceLinkedRole",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonRDSReadOnlyAccess": {
+    actions: [
+      "rds:Describe*",
+      "rds:ListTagsForResource",
+      "ec2:Describe*",
+      "cloudwatch:GetMetricStatistics",
+      "cloudwatch:DescribeAlarms",
+      "logs:DescribeLogStreams",
+      "logs:GetLogEvents",
+    ],
+    resources: "*",
+  },
+
   // Lambda
-  "arn:aws:iam::aws:policy/AWSLambda_FullAccess":       { actions: ["lambda:*", "iam:PassRole"],  resources: "*" },
+  "arn:aws:iam::aws:policy/AWSLambda_FullAccess": {
+    actions: [
+      "lambda:*",
+      "cloudwatch:*",
+      "logs:*",
+      "iam:PassRole",
+      "iam:CreateServiceLinkedRole",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AWSLambda_ReadOnlyAccess": {
+    actions: [
+      "lambda:Get*",
+      "lambda:List*",
+      "cloudwatch:GetMetricStatistics",
+      "cloudwatch:ListMetrics",
+      "logs:DescribeLogGroups",
+      "logs:DescribeLogStreams",
+      "logs:GetLogEvents",
+    ],
+    resources: "*",
+  },
+
   // DynamoDB
-  "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess":   { actions: ["dynamodb:*", "cloudwatch:*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess": {
+    actions: [
+      "dynamodb:*",
+      "dax:*",
+      "application-autoscaling:*",
+      "cloudwatch:*",
+      "iam:CreateServiceLinkedRole",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonDynamoDBReadOnlyAccess": {
+    actions: [
+      "dynamodb:Describe*",
+      "dynamodb:List*",
+      "dynamodb:GetItem",
+      "dynamodb:BatchGetItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "cloudwatch:GetMetricStatistics",
+    ],
+    resources: "*",
+  },
+
+  // CloudWatch / Logs
+  "arn:aws:iam::aws:policy/CloudWatchFullAccess": {
+    actions: ["cloudwatch:*", "logs:*", "events:*", "sns:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess": {
+    actions: [
+      "cloudwatch:Describe*",
+      "cloudwatch:Get*",
+      "cloudwatch:List*",
+      "logs:Describe*",
+      "logs:Get*",
+      "logs:List*",
+      "events:Describe*",
+      "events:List*",
+      "events:TestEventPattern",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess": {
+    actions: ["logs:*", "cloudwatch:GenerateQuery"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/CloudWatchLogsReadOnlyAccess": {
+    actions: ["logs:Describe*", "logs:Get*", "logs:List*", "logs:FilterLogEvents", "logs:StartQuery", "logs:StopQuery"],
+    resources: "*",
+  },
+
+  // CloudTrail
+  "arn:aws:iam::aws:policy/AWSCloudTrail_FullAccess": {
+    actions: ["cloudtrail:*", "s3:*", "sns:*", "logs:*", "cloudwatch:*", "iam:CreateServiceLinkedRole"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AWSCloudTrail_ReadOnlyAccess": {
+    actions: ["cloudtrail:Get*", "cloudtrail:List*", "cloudtrail:Describe*", "cloudtrail:LookupEvents"],
+    resources: "*",
+  },
+
+  // Route53
+  "arn:aws:iam::aws:policy/AmazonRoute53FullAccess": {
+    actions: [
+      "route53:*",
+      "route53domains:*",
+      "cloudfront:ListDistributions",
+      "elasticloadbalancing:DescribeLoadBalancers",
+      "elasticbeanstalk:DescribeEnvironments",
+      "s3:ListBucket",
+      "s3:GetBucketLocation",
+      "s3:GetBucketWebsite",
+      "ec2:DescribeVpcs",
+      "ec2:DescribeVpcEndpoints",
+      "ec2:DescribeRegions",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonRoute53ReadOnlyAccess": {
+    actions: [
+      "route53:Get*",
+      "route53:List*",
+      "route53:TestDNSAnswer",
+      "route53domains:Get*",
+      "route53domains:List*",
+    ],
+    resources: "*",
+  },
+
+  // CloudFront
+  "arn:aws:iam::aws:policy/CloudFrontFullAccess": {
+    actions: ["cloudfront:*", "acm:ListCertificates", "iam:ListServerCertificates", "waf:ListWebACLs", "wafv2:ListWebACLs"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/CloudFrontReadOnlyAccess": {
+    actions: ["cloudfront:Get*", "cloudfront:List*"],
+    resources: "*",
+  },
+
+  // API Gateway
+  "arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator": {
+    actions: ["apigateway:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess": {
+    actions: ["execute-api:Invoke", "execute-api:ManageConnections"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonAPIGatewayPushToCloudWatchLogs": {
+    actions: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:DescribeLogGroups", "logs:DescribeLogStreams", "logs:PutLogEvents", "logs:GetLogEvents", "logs:FilterLogEvents"],
+    resources: "*",
+  },
+
+  // SQS / SNS
+  "arn:aws:iam::aws:policy/AmazonSQSFullAccess": {
+    actions: ["sqs:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonSQSReadOnlyAccess": {
+    actions: ["sqs:Get*", "sqs:List*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonSNSFullAccess": {
+    actions: ["sns:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonSNSReadOnlyAccess": {
+    actions: ["sns:Get*", "sns:List*", "sns:CheckIfPhoneNumberIsOptedOut"],
+    resources: "*",
+  },
+
+  // SSM / Secrets Manager / KMS
+  "arn:aws:iam::aws:policy/AmazonSSMFullAccess": {
+    actions: ["ssm:*", "ssmmessages:*", "ec2messages:*", "cloudwatch:*", "iam:PassRole"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess": {
+    actions: ["ssm:Get*", "ssm:List*", "ssm:Describe*", "ssm:GetParametersByPath"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/SecretsManagerReadWrite": {
+    actions: ["secretsmanager:*", "cloudformation:CreateChangeSet", "cloudformation:DescribeChangeSet", "cloudformation:DescribeStackResource", "cloudformation:DescribeStacks", "cloudformation:ExecuteChangeSet", "docdb-elastic:GetCluster", "docdb-elastic:ListClusters", "ec2:DescribeSecurityGroups", "ec2:DescribeSubnets", "ec2:DescribeVpcs", "kms:DescribeKey", "kms:ListAliases", "kms:ListKeys", "lambda:ListFunctions", "rds:DescribeDBClusters", "rds:DescribeDBInstances", "redshift:DescribeClusters", "redshift-serverless:ListWorkgroups", "redshift-serverless:GetNamespace", "tag:GetResources"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AWSKeyManagementServicePowerUser": {
+    actions: [
+      "kms:Create*",
+      "kms:Describe*",
+      "kms:Enable*",
+      "kms:List*",
+      "kms:Put*",
+      "kms:Update*",
+      "kms:Revoke*",
+      "kms:Disable*",
+      "kms:Get*",
+      "kms:Delete*",
+      "kms:TagResource",
+      "kms:UntagResource",
+      "kms:ScheduleKeyDeletion",
+      "kms:CancelKeyDeletion",
+    ],
+    resources: "*",
+  },
+
+  // ACM
+  "arn:aws:iam::aws:policy/AWSCertificateManagerFullAccess": {
+    actions: ["acm:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AWSCertificateManagerReadOnly": {
+    actions: ["acm:DescribeCertificate", "acm:GetCertificate", "acm:ListCertificates", "acm:ListTagsForCertificate"],
+    resources: "*",
+  },
+
+  // CloudFormation
+  "arn:aws:iam::aws:policy/AWSCloudFormationFullAccess": {
+    actions: ["cloudformation:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AWSCloudFormationReadOnlyAccess": {
+    actions: ["cloudformation:Describe*", "cloudformation:Get*", "cloudformation:List*", "cloudformation:EstimateTemplateCost", "cloudformation:ValidateTemplate"],
+    resources: "*",
+  },
+
+  // Elastic Beanstalk
+  "arn:aws:iam::aws:policy/AWSElasticBeanstalkFullAccess": {
+    actions: [
+      "elasticbeanstalk:*",
+      "ec2:*",
+      "ecs:*",
+      "ecr:*",
+      "elasticloadbalancing:*",
+      "autoscaling:*",
+      "cloudwatch:*",
+      "s3:*",
+      "sns:*",
+      "cloudformation:*",
+      "iam:PassRole",
+      "iam:CreateServiceLinkedRole",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AWSElasticBeanstalkReadOnly": {
+    actions: [
+      "elasticbeanstalk:Describe*",
+      "elasticbeanstalk:List*",
+      "elasticbeanstalk:RequestEnvironmentInfo",
+      "elasticbeanstalk:RetrieveEnvironmentInfo",
+    ],
+    resources: "*",
+  },
+
+  // ElastiCache
+  "arn:aws:iam::aws:policy/AmazonElastiCacheFullAccess": {
+    actions: ["elasticache:*", "ec2:Describe*", "cloudwatch:*", "iam:CreateServiceLinkedRole"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonElastiCacheReadOnlyAccess": {
+    actions: ["elasticache:Describe*", "elasticache:List*", "cloudwatch:GetMetricStatistics"],
+    resources: "*",
+  },
+
+  // Redshift
+  "arn:aws:iam::aws:policy/AmazonRedshiftFullAccess": {
+    actions: ["redshift:*", "redshift-serverless:*", "ec2:Describe*", "cloudwatch:*", "iam:PassRole", "iam:CreateServiceLinkedRole"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonRedshiftReadOnlyAccess": {
+    actions: ["redshift:Describe*", "redshift:View*", "redshift-serverless:Get*", "redshift-serverless:List*", "ec2:Describe*", "cloudwatch:GetMetricStatistics"],
+    resources: "*",
+  },
+
+  // Glue / Athena
+  "arn:aws:iam::aws:policy/AWSGlueConsoleFullAccess": {
+    actions: ["glue:*", "s3:*", "cloudwatch:*", "logs:*", "iam:PassRole"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonAthenaFullAccess": {
+    actions: ["athena:*", "glue:*", "s3:*"],
+    resources: "*",
+  },
+
+  // SageMaker
+  "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess": {
+    actions: ["sagemaker:*", "ecr:*", "cloudwatch:*", "logs:*", "s3:*", "iam:PassRole"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonSageMakerReadOnly": {
+    actions: ["sagemaker:Describe*", "sagemaker:List*", "sagemaker:Get*", "cloudwatch:GetMetricData", "cloudwatch:GetMetricStatistics", "logs:Describe*", "logs:Get*"],
+    resources: "*",
+  },
+
+  // Cognito
+  "arn:aws:iam::aws:policy/AmazonCognitoPowerUser": {
+    actions: ["cognito-idp:*", "cognito-identity:*", "cognito-sync:*", "iam:ListRoles", "iam:PassRole", "sns:ListPlatformApplications"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonCognitoReadOnly": {
+    actions: ["cognito-idp:Describe*", "cognito-idp:List*", "cognito-identity:Describe*", "cognito-identity:List*", "cognito-sync:Describe*", "cognito-sync:List*"],
+    resources: "*",
+  },
+
+  // SES
+  "arn:aws:iam::aws:policy/AmazonSESFullAccess": {
+    actions: ["ses:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AmazonSESReadOnlyAccess": {
+    actions: ["ses:Get*", "ses:List*", "ses:Describe*"],
+    resources: "*",
+  },
+
+  // Organizations
+  "arn:aws:iam::aws:policy/AWSOrganizationsFullAccess": {
+    actions: ["organizations:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/AWSOrganizationsReadOnlyAccess": {
+    actions: ["organizations:Describe*", "organizations:List*"],
+    resources: "*",
+  },
+
   // Job function policies
-  "arn:aws:iam::aws:policy/job-function/Billing":                  { actions: ["aws-portal:*", "budgets:*", "ce:*", "cur:*"],  resources: "*" },
-  "arn:aws:iam::aws:policy/job-function/DatabaseAdministrator":    { actions: ["rds:*", "dynamodb:*", "elasticache:*", "redshift:*", "cloudwatch:*"],  resources: "*" },
-  "arn:aws:iam::aws:policy/job-function/DataScientistAccess":      { actions: ["s3:*", "athena:*", "glue:*", "sagemaker:*", "redshift:*"],  resources: "*" },
-  "arn:aws:iam::aws:policy/job-function/NetworkAdministrator":     { actions: ["ec2:*", "elasticloadbalancing:*", "route53:*", "vpc:*"],  resources: "*" },
-  "arn:aws:iam::aws:policy/job-function/SupportUser":              { actions: ["support:*", "*.Describe*", "*.List*"],  resources: "*" },
-  "arn:aws:iam::aws:policy/job-function/SystemAdministrator":      { actions: ["*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/job-function/Billing": {
+    actions: ["aws-portal:*", "budgets:*", "ce:*", "cur:*", "pricing:*", "account:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/job-function/DatabaseAdministrator": {
+    actions: [
+      "rds:*",
+      "dynamodb:*",
+      "elasticache:*",
+      "redshift:*",
+      "redshift-serverless:*",
+      "cloudwatch:*",
+      "logs:*",
+      "ec2:Describe*",
+      "iam:PassRole",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/job-function/DataScientistAccess": {
+    actions: [
+      "s3:*",
+      "athena:*",
+      "glue:*",
+      "sagemaker:*",
+      "redshift:*",
+      "redshift-serverless:*",
+      "emr:*",
+      "cloudwatch:*",
+      "logs:*",
+      "iam:PassRole",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/job-function/NetworkAdministrator": {
+    actions: [
+      "ec2:*",
+      "elasticloadbalancing:*",
+      "route53:*",
+      "directconnect:*",
+      "globalaccelerator:*",
+      "networkmanager:*",
+      "cloudfront:*",
+      "acm:ListCertificates",
+      "iam:CreateServiceLinkedRole",
+    ],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/job-function/SupportUser": {
+    actions: ["support:*", "*.Describe*", "*.List*", "*.Get*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/job-function/SystemAdministrator": {
+    actions: ["*"],
+    resources: "*",
+  },
+
   // SSO / service-linked
-  "arn:aws:iam::aws:policy/aws-service-role/AWSSSOMemberAccountAdministrator": { actions: ["sso:*", "organizations:*"],  resources: "*" },
-  "arn:aws:iam::aws:policy/aws-service-role/AWSSSODirectoryAdministrator":     { actions: ["sso:*", "identitystore:*"],  resources: "*" },
-  "arn:aws:iam::aws:policy/aws-service-role/AWSSSOReadOnly":                   { actions: ["sso:List*", "sso:Get*", "identitystore:Describe*", "identitystore:List*"],  resources: "*" },
+  "arn:aws:iam::aws:policy/aws-service-role/AWSSSOMemberAccountAdministrator": {
+    actions: ["sso:*", "organizations:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/aws-service-role/AWSSSODirectoryAdministrator": {
+    actions: ["sso:*", "identitystore:*"],
+    resources: "*",
+  },
+
+  "arn:aws:iam::aws:policy/aws-service-role/AWSSSOReadOnly": {
+    actions: ["sso:List*", "sso:Get*", "identitystore:Describe*", "identitystore:List*"],
+    resources: "*",
+  },
 };
 
 /**

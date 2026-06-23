@@ -45,16 +45,30 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     // Required fields (resourceKey is auto-generated — not accepted from client)
-    const required = ["name", "awsAccountId", "roleArn"] as const;
+    const required = ["name", "awsAccountId"] as const;
     for (const field of required) {
       if (!body[field] || typeof body[field] !== "string") {
         return badRequest(`Missing or invalid required field: '${field}'`);
       }
     }
 
-    // Validate roleArn format
-    if (!body.roleArn.startsWith("arn:aws:iam::")) {
-      return badRequest("roleArn must be a valid IAM role ARN (arn:aws:iam::...)");
+    const strategy = body.stsStrategy ?? "assume_role";
+
+    // roleArn is required for assume_role, optional for federation_token
+    if (strategy === "assume_role") {
+      if (!body.roleArn || typeof body.roleArn !== "string") {
+        return badRequest("roleArn is required when stsStrategy is 'assume_role'");
+      }
+      if (!body.roleArn.startsWith("arn:aws:iam::")) {
+        return badRequest("roleArn must be a valid IAM role ARN (arn:aws:iam::...)");
+      }
+      if (body.roleArn.includes(":user/")) {
+        return badRequest(
+          `roleArn '${body.roleArn}' is an IAM user ARN, not a role ARN. ` +
+          `AssumeRole requires arn:aws:iam::ACCOUNT:role/ROLE_NAME. ` +
+          `Either fix the ARN or change stsStrategy to 'federation_token'.`
+        );
+      }
     }
 
     // Validate org scope
@@ -70,7 +84,7 @@ export async function POST(req: NextRequest) {
       name: body.name,
       description: body.description,
       awsAccountId: body.awsAccountId,
-      roleArn: body.roleArn,
+      roleArn: body.roleArn ?? "",
       region: body.region ?? "us-east-1",
       destination: body.destination ?? "https://console.aws.amazon.com/",
       issuer: body.issuer ?? "internal-broker",
@@ -105,8 +119,22 @@ export async function PUT(req: NextRequest) {
     if (!isAdminOrAbove(auth)) return forbidden();
 
     const data = await req.json();
-    if (!data.id || !data.name || !data.awsAccountId || !data.roleArn) {
-      return badRequest("Missing required fields (id, name, awsAccountId, roleArn)");
+    if (!data.id || !data.name || !data.awsAccountId) {
+      return badRequest("Missing required fields (id, name, awsAccountId)");
+    }
+
+    const putStrategy = data.stsStrategy ?? "assume_role";
+    if (putStrategy === "assume_role") {
+      if (!data.roleArn) {
+        return badRequest("roleArn is required when stsStrategy is 'assume_role'");
+      }
+      if (data.roleArn.includes(":user/")) {
+        return badRequest(
+          `roleArn '${data.roleArn}' is an IAM user ARN, not a role ARN. ` +
+          `AssumeRole requires arn:aws:iam::ACCOUNT:role/ROLE_NAME. ` +
+          `Either fix the ARN or change stsStrategy to 'federation_token'.`
+        );
+      }
     }
 
     // Verify org scope on existing resource

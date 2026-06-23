@@ -274,9 +274,22 @@ export const awsBrokerService = {
         throw new Error(`AWS resource config invalid: ${err.message}`);
       }
       if (isStsError) {
+        if (config.stsStrategy === "federation_token") {
+          throw new Error(
+            `GetFederationToken failed for resource '${resourceKey}'. ` +
+            `Check that the broker IAM user has sts:GetFederationToken permission ` +
+            `and is using long-term credentials (not an assumed role).`
+          );
+        }
+        const isUserArn = config.roleArn?.includes(":user/");
         throw new Error(
-          `Failed to obtain temporary AWS credentials. ` +
-          `Check that role '${config.roleArn}' exists and the broker has sts:AssumeRole permission.`
+          isUserArn
+            ? `Invalid role ARN '${config.roleArn}': this is an IAM user ARN — ` +
+              `AssumeRole only works with role ARNs (arn:aws:iam::ACCOUNT:role/NAME). ` +
+              `Edit the resource in Admin → AWS Resources and fix the ARN, ` +
+              `or switch STS Strategy to "Federation Token (Identity)".`
+            : `Failed to obtain temporary AWS credentials. ` +
+              `Check that role '${config.roleArn}' exists and the broker has sts:AssumeRole permission.`
         );
       }
       throw new Error(
