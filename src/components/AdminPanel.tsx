@@ -695,6 +695,8 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
   const [detectingPolicies, setDetectingPolicies] = useState(false);
   const [detectedPolicies, setDetectedPolicies] = useState<string[] | null>(null);
   const [detectedCallerArn, setDetectedCallerArn] = useState<string | null>(null);
+  const [detectedAuthType, setDetectedAuthType] = useState<string | null>(null);
+  const [detectedSsoInfo, setDetectedSsoInfo] = useState<{ permissionSetName: string; hasInlinePolicy: boolean } | null>(null);
   const [formData, setFormData] = useState({
     name: initialData?.name || "",
     awsAccountId: initialData?.awsAccountId || "",
@@ -712,6 +714,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
     sessionName: initialData?.sessionName || "",
     accessKeyId: "",
     secretAccessKey: "",
+    sessionToken: "",
   });
 
   useEffect(() => {
@@ -775,7 +778,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
     setLoading(true);
     try {
       const isEdit = !!initialData;
-      const { accessKeyId, secretAccessKey, ...resourceFields } = formData;
+      const { accessKeyId, secretAccessKey, sessionToken: _sessionToken, ...resourceFields } = formData;
       const payload = isEdit
         ? { id: initialData.id, resourceKey: initialData.resourceKey, ...resourceFields }
         : { ...resourceFields };
@@ -823,6 +826,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
           sessionName: "",
           accessKeyId: "",
           secretAccessKey: "",
+          sessionToken: "",
         });
       } else if (onCancelEdit) {
         onCancelEdit();
@@ -1009,7 +1013,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
             variant="outlined"
             placeholder="AKIA..."
             value={formData.accessKeyId}
-            onChange={(e) => { setFormData({ ...formData, accessKeyId: e.target.value }); setDetectedPolicies(null); setDetectedCallerArn(null); }}
+            onChange={(e) => { setFormData({ ...formData, accessKeyId: e.target.value }); setDetectedPolicies(null); setDetectedCallerArn(null); setDetectedAuthType(null); setDetectedSsoInfo(null); }}
             sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
           />
         </Grid>
@@ -1021,7 +1025,24 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
             variant="outlined"
             placeholder="••••••••••••"
             value={formData.secretAccessKey}
-            onChange={(e) => { setFormData({ ...formData, secretAccessKey: e.target.value }); setDetectedPolicies(null); setDetectedCallerArn(null); }}
+            onChange={(e) => { setFormData({ ...formData, secretAccessKey: e.target.value }); setDetectedPolicies(null); setDetectedCallerArn(null); setDetectedAuthType(null); setDetectedSsoInfo(null); }}
+            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+          />
+        </Grid>
+        <Grid size={12}>
+          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>
+            SESSION TOKEN
+            <Typography component="span" variant="caption" sx={{ ml: 1, fontWeight: 400, color: 'text.disabled' }}>
+              optional — required for AWS SSO / temporary credentials (not stored)
+            </Typography>
+          </Typography>
+          <TextField
+            fullWidth
+            type="password"
+            variant="outlined"
+            placeholder="Leave blank for long-term IAM credentials"
+            value={formData.sessionToken}
+            onChange={(e) => { setFormData({ ...formData, sessionToken: e.target.value }); setDetectedPolicies(null); setDetectedCallerArn(null); setDetectedAuthType(null); setDetectedSsoInfo(null); }}
             sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
           />
         </Grid>
@@ -1043,9 +1064,26 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
                 AVAILABLE POLICIES
               </Typography>
               {detectedCallerArn && (
-                <Typography variant="caption" sx={{ ml: 1.5, color: 'success.main', fontFamily: 'monospace', fontSize: '0.65rem' }}>
-                  {detectedCallerArn}
-                </Typography>
+                <Box component="span" sx={{ ml: 1.5, display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                  <Typography component="span" variant="caption" sx={{ color: 'success.main', fontFamily: 'monospace', fontSize: '0.65rem' }}>
+                    {detectedCallerArn}
+                  </Typography>
+                  {detectedAuthType && (
+                    <Chip
+                      size="small"
+                      label={detectedAuthType === "AWS_SSO" ? "AWS SSO" : detectedAuthType === "IAM_USER" ? "IAM User" : "IAM Role"}
+                      color={detectedAuthType === "AWS_SSO" ? "info" : "success"}
+                      variant="outlined"
+                      sx={{ height: 16, fontSize: '0.6rem', fontWeight: 700, '& .MuiChip-label': { px: 0.75 } }}
+                    />
+                  )}
+                  {detectedSsoInfo && (
+                    <Typography component="span" variant="caption" sx={{ color: 'info.main', fontSize: '0.65rem' }}>
+                      Permission Set: <strong>{detectedSsoInfo.permissionSetName}</strong>
+                      {detectedSsoInfo.hasInlinePolicy && " · has inline policy"}
+                    </Typography>
+                  )}
+                </Box>
               )}
             </Box>
             <Button
@@ -1063,7 +1101,12 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
                     body: JSON.stringify(
                       usingStoredKeys
                         ? { resourceKey: initialData.resourceKey, region: formData.region || "us-east-1" }
-                        : { accessKeyId: formData.accessKeyId, secretAccessKey: formData.secretAccessKey, region: formData.region || "us-east-1" }
+                        : {
+                            accessKeyId: formData.accessKeyId,
+                            secretAccessKey: formData.secretAccessKey,
+                            ...(formData.sessionToken ? { sessionToken: formData.sessionToken } : {}),
+                            region: formData.region || "us-east-1",
+                          }
                     ),
                   });
                   const data = await res.json();
@@ -1071,6 +1114,8 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
                   const detected: string[] = data.policyArns ?? [];
                   setDetectedPolicies(detected);
                   setDetectedCallerArn(data.callerArn ?? null);
+                  setDetectedAuthType(data.authType ?? null);
+                  setDetectedSsoInfo(data.ssoInfo ?? null);
                   // Auto-select all detected policies (replacing previous selection)
                   if (detected.length > 0) {
                     setFormData((prev) => ({ ...prev, availablePolicyArns: detected }));
@@ -1125,7 +1170,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
               <>
                 <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
                   {detectedPolicies
-                    ? `${detectedPolicies.length} polic${detectedPolicies.length !== 1 ? "ies" : "y"} detected from credentials — check the ones to make available for user assignment.`
+                    ? `${detectedPolicies.length} polic${detectedPolicies.length !== 1 ? "ies" : "y"} detected${detectedSsoInfo ? ` from SSO permission set "${detectedSsoInfo.permissionSetName}"` : " from credentials"} — check the ones to make available for user assignment.`
                     : `${listPolicies.length} polic${listPolicies.length !== 1 ? "ies" : "y"} saved on this resource. Click "Re-detect" to refresh from current credentials.`}
                 </Typography>
                 <PolicyChecklist

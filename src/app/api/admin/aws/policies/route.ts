@@ -11,6 +11,11 @@ import {
 import { getAuthContext, unauthorized, forbidden, badRequest, serverError } from "@/lib/api-helpers";
 import { isAdminOrAbove } from "@/lib/auth-policy";
 import { secretManager } from "@/server/secrets/secret-manager";
+import {
+  detectAwsAuthType,
+  AwsAuthType,
+  discoverSsoPermissionSetPolicies,
+} from "@/server/services/aws-identity-center.service";
 
 // ─── Static cross-service implications ───────────────────────────────────────
 // Global policies (Admin, PowerUser, ReadOnly) that imply other global policies.
@@ -150,7 +155,7 @@ export async function POST(req: NextRequest) {
     if (!isAdminOrAbove(auth)) return forbidden();
 
     const body = await req.json();
-    let { accessKeyId, secretAccessKey, region = "us-east-1" } = body;
+    let { accessKeyId, secretAccessKey, sessionToken, region = "us-east-1" } = body;
 
     // If a resourceKey is provided, load credentials from the secret manager
     if (body.resourceKey && (!accessKeyId || !secretAccessKey)) {
@@ -171,6 +176,7 @@ export async function POST(req: NextRequest) {
     const credentials = {
       accessKeyId: String(accessKeyId).trim(),
       secretAccessKey: String(secretAccessKey).trim(),
+      ...(sessionToken ? { sessionToken: String(sessionToken).trim() } : {}),
     };
 
     // Step 1: Identify who these keys belong to
@@ -178,10 +184,12 @@ export async function POST(req: NextRequest) {
     let callerArn: string;
     let callerType: "user" | "role" | "unknown";
     let principalName: string;
+    let accountId: string;
 
     try {
       const identity = await sts.send(new GetCallerIdentityCommand({}));
       callerArn = identity.Arn ?? "";
+      accountId = identity.Account ?? "";
       if (callerArn.includes(":user/")) {
         callerType = "user";
         principalName = callerArn.split(":user/").pop() ?? "";
@@ -202,6 +210,71 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const authType = detectAwsAuthType(callerArn);
+
+    // ── SSO branch ────────────────────────────────────────────────────────────
+    // When credentials come from an SSO session, IAM ListAttachedUserPolicies
+    // won't find anything useful. Instead query the SSO Admin API for the
+    // Permission Set's policies.
+    if (authType === AwsAuthType.AWS_SSO) {
+      const ssoResult = await discoverSsoPermissionSetPolicies(
+        credentials,
+        accountId,
+        principalName, // e.g. "AWSReservedSSO_AdministratorAccess_abc123"
+        region
+      );
+
+      if ("error" in ssoResult) {
+        return NextResponse.json({ error: ssoResult.error }, { status: 400 });
+      }
+
+      const attachedArns = new Set<string>([
+        ...ssoResult.managedPolicyArns,
+        ...ssoResult.customerManagedPolicyArns,
+      ]);
+
+      // Apply static implications (AdministratorAccess → …)
+      const result = new Set<string>(attachedArns);
+      for (const arn of attachedArns) {
+        for (const implied of STATIC_IMPLIES[arn] ?? []) {
+          result.add(implied);
+        }
+      }
+
+      // Dynamically derive ReadOnly variants and verify via GetPolicy
+      const iam = new IAMClient({ region: "us-east-1", credentials });
+      const candidates = deriveReadOnlyCandidates(result);
+      if (candidates.length > 0) {
+        await Promise.all(
+          candidates.map(async (candidateArn) => {
+            try {
+              await iam.send(new GetPolicyCommand({ PolicyArn: candidateArn }));
+              result.add(candidateArn);
+            } catch {
+              // Policy doesn't exist — skip
+            }
+          })
+        );
+      }
+
+      return NextResponse.json({
+        authType,
+        callerArn,
+        callerType,
+        principalName,
+        directPolicyArns: Array.from(attachedArns),
+        policyArns: Array.from(result),
+        ssoInfo: {
+          instanceArn: ssoResult.instanceArn,
+          permissionSetName: ssoResult.permissionSetName,
+          permissionSetArn: ssoResult.permissionSetArn,
+          hasInlinePolicy: ssoResult.hasInlinePolicy,
+          customerManagedPolicyCount: ssoResult.customerManagedPolicyArns.length,
+        },
+      });
+    }
+
+    // ── IAM branch (user / assumed-role / unknown) ────────────────────────────
     const iam = new IAMClient({ region: "us-east-1", credentials });
     const attachedArns = new Set<string>();
 
@@ -293,6 +366,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
+      authType,
       callerArn,
       callerType,
       principalName,
