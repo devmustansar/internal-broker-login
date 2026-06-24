@@ -2166,34 +2166,55 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
           <Stack spacing={3}>
             <Box>
               <Typography variant="caption" sx={{ mb: 1, display: "block", fontWeight: 800, color: "text.secondary", letterSpacing: "0.08em" }}>SELECT RESOURCE</Typography>
-              <FormControl fullWidth variant="outlined">
-                <Select displayEmpty value={assignForm.resourceKey}
-                  onChange={(e) => setAssignForm({ resourceKey: e.target.value, policyArns: [], sessionName: "" })}>
-                  <MenuItem value="" disabled><em>Choose a resource…</em></MenuItem>
-                  {allResources.length > 0 && <MenuItem disabled sx={{ fontSize: "0.65rem", fontWeight: 800, color: "text.secondary" }}>— WEB RESOURCES —</MenuItem>}
-                  {allResources.map((r: any) => (
-                    <MenuItem key={r.resourceKey} value={r.resourceKey}>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Globe size={14} />
-                        <ListItemText primary={r.name} secondary={r.resourceKey}
-                          primaryTypographyProps={{ variant: "body2", fontWeight: 700 }}
-                          secondaryTypographyProps={{ variant: "caption", fontFamily: "monospace" }} />
-                      </Stack>
-                    </MenuItem>
-                  ))}
-                  {awsResources.length > 0 && <MenuItem disabled sx={{ fontSize: "0.65rem", fontWeight: 800, color: "text.secondary" }}>— AWS RESOURCES —</MenuItem>}
-                  {awsResources.map((r: any) => (
-                    <MenuItem key={r.resourceKey} value={r.resourceKey}>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Server size={14} />
-                        <ListItemText primary={r.name} secondary={`${r.resourceKey} · ${r.awsAccountId}`}
-                          primaryTypographyProps={{ variant: "body2", fontWeight: 700 }}
-                          secondaryTypographyProps={{ variant: "caption", fontFamily: "monospace" }} />
-                      </Stack>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              <Autocomplete
+                fullWidth
+                options={[
+                  ...allResources.map((r: any) => ({ ...r, _type: "web" })),
+                  ...awsResources.map((r: any) => ({ ...r, _type: "aws" })),
+                ]}
+                groupBy={(o) => o._type === "aws" ? "AWS Resources" : "Web Resources"}
+                getOptionLabel={(o) => o.name ?? o.resourceKey}
+                isOptionEqualToValue={(o, v) => o.resourceKey === v.resourceKey}
+                filterOptions={(options, { inputValue }) => {
+                  const q = inputValue.toLowerCase();
+                  return options.filter((o) =>
+                    o.name?.toLowerCase().includes(q) ||
+                    o.resourceKey?.toLowerCase().includes(q) ||
+                    o.awsAccountId?.toLowerCase().includes(q) ||
+                    o.description?.toLowerCase().includes(q)
+                  );
+                }}
+                value={
+                  [...allResources, ...awsResources].find((r: any) => r.resourceKey === assignForm.resourceKey) ?? null
+                }
+                onChange={(_, v) => setAssignForm({ resourceKey: v?.resourceKey ?? "", policyArns: [], sessionName: "" })}
+                renderInput={(params) => (
+                  <TextField {...params} placeholder="Search by name, resource key, or AWS account…" size="small" />
+                )}
+                renderOption={(props, o) => (
+                  <Box component="li" {...props} key={o.resourceKey}>
+                    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ width: "100%", py: 0.5 }}>
+                      {o._type === "aws" ? <Server size={14} /> : <Globe size={14} />}
+                      <Box flex={1} minWidth={0}>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{o.name}</Typography>
+                        <Typography variant="caption" sx={{ fontFamily: "monospace", color: "text.secondary", fontSize: "0.65rem" }}>
+                          {o.resourceKey}{o.awsAccountId ? ` · ${o.awsAccountId}` : ""}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Box>
+                )}
+                renderGroup={(params) => (
+                  <Box key={params.key}>
+                    <Typography variant="caption" sx={{ px: 2, py: 0.75, display: "block", fontWeight: 800, fontSize: "0.6rem", letterSpacing: "0.1em", color: "text.secondary", bgcolor: "background.default" }}>
+                      — {params.group.toUpperCase()} —
+                    </Typography>
+                    {params.children}
+                  </Box>
+                )}
+                noOptionsText="No resources match your search"
+                sx={{ "& .MuiInputBase-root": { borderRadius: 2 } }}
+              />
             </Box>
             {assignTarget?.resourceAccess?.some((ra: any) => (ra.resource?.resourceKey || ra.awsResource?.resourceKey) === assignForm.resourceKey) && (
               <Alert severity="info" variant="outlined" sx={{ borderRadius: 3 }}>

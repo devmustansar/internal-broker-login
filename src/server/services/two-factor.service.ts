@@ -134,7 +134,12 @@ function readVarint(buf: Buffer, offset: number): { value: number; next: number 
   let shift = 0;
   while (offset < buf.length) {
     const byte = buf[offset++];
-    result |= (byte & 0x7f) << shift;
+    // Only accumulate bits within the 32-bit range; consume but discard higher bits.
+    // Use >>> 0 after each OR to keep result as an unsigned 32-bit integer so
+    // writeUInt32LE never receives a negative value.
+    if (shift < 32) {
+      result = (result | ((byte & 0x7f) << shift)) >>> 0;
+    }
     if ((byte & 0x80) === 0) break;
     shift += 7;
   }

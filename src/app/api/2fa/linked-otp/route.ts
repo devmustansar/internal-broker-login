@@ -158,7 +158,7 @@ export async function GET(req: NextRequest) {
           ipAddress: ip,
         })),
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return NextResponse.json(result);
   } catch (err) {
