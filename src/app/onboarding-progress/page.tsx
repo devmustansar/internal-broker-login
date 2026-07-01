@@ -460,7 +460,7 @@ export default function OnboardingProgressPage() {
 
   if (loading) {
     return (
-      <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#f8fafc" }}>
+      <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "action.hover" }}>
         <Stack alignItems="center" spacing={2}>
           <CircularProgress size={48} />
           <Typography color="text.secondary">Loading onboarding data…</Typography>
@@ -471,7 +471,7 @@ export default function OnboardingProgressPage() {
 
   if (error) {
     return (
-      <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "#f8fafc" }}>
+      <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "action.hover" }}>
         <Container maxWidth="sm">
           <Alert severity="error" action={<Button onClick={fetchSummary} size="small">Retry</Button>}>{error}</Alert>
         </Container>
@@ -487,15 +487,32 @@ export default function OnboardingProgressPage() {
     : "not_started";
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "#f8fafc" }}>
+    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
       {/* ── Header ── */}
-      <Box sx={{ bgcolor: "white", borderBottom: "1px solid #e2e8f0", py: 3 }}>
-        <Container maxWidth="xl">
-          <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2}>
+      <Box
+        sx={{
+          background: "linear-gradient(135deg, #0f172a 0%, #1a2744 60%, #0f2027 100%)",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          py: 3.5,
+          position: "relative",
+          overflow: "hidden",
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            inset: 0,
+            background: "radial-gradient(ellipse at 15% 50%, rgba(59,130,246,0.12) 0%, transparent 55%), radial-gradient(ellipse at 85% 20%, rgba(99,102,241,0.08) 0%, transparent 50%)",
+            pointerEvents: "none",
+          },
+        }}
+      >
+        <Container maxWidth="xl" sx={{ position: "relative", zIndex: 1 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={2}>
             <Box>
-              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 0.5 }}>
-                <TrendingUp size={22} color="#1976d2" />
-                <Typography variant="h5" sx={{ fontWeight: 800 }}>
+              <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 0.75 }}>
+                <Box sx={{ p: 0.75, borderRadius: 1.5, bgcolor: "rgba(59,130,246,0.15)", display: "flex" }}>
+                  <TrendingUp size={20} color="#60a5fa" />
+                </Box>
+                <Typography variant="h5" sx={{ fontWeight: 800, color: "#f1f5f9", letterSpacing: "-0.01em" }}>
                   Access Migration Progress
                 </Typography>
                 <Chip
@@ -505,30 +522,41 @@ export default function OnboardingProgressPage() {
                   sx={{ fontWeight: 700, fontSize: "0.7rem" }}
                 />
               </Stack>
-              <Typography variant="body2" color="text.secondary">
-                Public progress overview for <strong>access.codingcops.com</strong> onboarding
+              <Typography variant="body2" sx={{ color: "rgba(148,163,184,0.9)", pl: 0.5 }}>
+                Public progress overview for{" "}
+                <Box component="span" sx={{ color: "#93c5fd", fontWeight: 600 }}>
+                  access.codingcops.com
+                </Box>{" "}
+                onboarding
               </Typography>
               {summary && (
-                <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: "block" }}>
+                <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "rgba(100,116,139,0.8)", pl: 0.5 }}>
                   Last updated: {new Date(summary.lastUpdatedAt).toLocaleString()}
                 </Typography>
               )}
             </Box>
-            <Stack direction="row" spacing={1}>
+            <Stack direction="row" spacing={1.5}>
               <Tooltip title="Refresh data">
                 <Button
                   variant="outlined"
                   size="small"
                   startIcon={<RefreshCw size={14} />}
                   onClick={fetchSummary}
-                  sx={{ borderRadius: 2, fontWeight: 700, textTransform: "none" }}
+                  sx={{
+                    borderRadius: 2,
+                    fontWeight: 700,
+                    textTransform: "none",
+                    borderColor: "rgba(255,255,255,0.15)",
+                    color: "#cbd5e1",
+                    "&:hover": { borderColor: "rgba(255,255,255,0.3)", bgcolor: "rgba(255,255,255,0.06)" },
+                  }}
                 >
                   Refresh
                 </Button>
               </Tooltip>
               <Tooltip title="Export summary as CSV">
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   size="small"
                   startIcon={<Download size={14} />}
                   onClick={() => {
@@ -548,7 +576,14 @@ export default function OnboardingProgressPage() {
                       ["Organization", "Members", "Resources", "Credentials", "2FA", "Fully Onboarded", "Pending", "Progress", "Status"]
                     );
                   }}
-                  sx={{ borderRadius: 2, fontWeight: 700, textTransform: "none" }}
+                  sx={{
+                    borderRadius: 2,
+                    fontWeight: 700,
+                    textTransform: "none",
+                    bgcolor: "rgba(59,130,246,0.85)",
+                    "&:hover": { bgcolor: "rgba(59,130,246,1)" },
+                    boxShadow: "0 0 20px rgba(59,130,246,0.25)",
+                  }}
                 >
                   Export CSV
                 </Button>
@@ -685,7 +720,7 @@ export default function OnboardingProgressPage() {
             <TableContainer>
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", letterSpacing: "0.06em", bgcolor: "#f8fafc" } }}>
+                  <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", letterSpacing: "0.06em", bgcolor: "action.hover" } }}>
                     <TableCell>ORGANIZATION</TableCell>
                     <TableCell align="center">TEAMS</TableCell>
                     <TableCell align="center">MEMBERS</TableCell>
@@ -705,7 +740,7 @@ export default function OnboardingProgressPage() {
                       hover
                       selected={selectedOrgId === org.organizationId}
                       onClick={() => setSelectedOrgId(org.organizationId === selectedOrgId ? null : org.organizationId)}
-                      sx={{ cursor: "pointer", "&.Mui-selected": { bgcolor: "#eff6ff" } }}
+                      sx={{ cursor: "pointer", "&.Mui-selected": { bgcolor: "rgba(59,130,246,0.10)" }, "&.Mui-selected:hover": { bgcolor: "rgba(59,130,246,0.14)" } }}
                     >
                       <TableCell>
                         <Typography variant="body2" sx={{ fontWeight: 700 }}>
@@ -794,7 +829,7 @@ export default function OnboardingProgressPage() {
                       { label: "Blocked", value: orgDetail.blockedMembers, color: "error" as const },
                     ].map((card) => (
                       <Grid key={card.label} size={{ xs: 6, sm: 4, md: 2 }}>
-                        <Box sx={{ p: 1.5, border: "1px solid #e2e8f0", borderRadius: 2, textAlign: "center" }}>
+                        <Box sx={{ p: 1.5, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 2, textAlign: "center" }}>
                           <Typography
                             variant="h5"
                             sx={{
@@ -849,7 +884,7 @@ export default function OnboardingProgressPage() {
                       <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
                         <Table size="small">
                           <TableHead>
-                            <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "#f8fafc" } }}>
+                            <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover" } }}>
                               <TableCell>TEAM</TableCell>
                               <TableCell align="center">MEMBERS</TableCell>
                               <TableCell align="center">WITH RESOURCES</TableCell>
@@ -936,7 +971,7 @@ export default function OnboardingProgressPage() {
                     <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
                       <Table size="small">
                         <TableHead>
-                          <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "#f8fafc" } }}>
+                          <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover" } }}>
                             <TableCell>MEMBER</TableCell>
                             <TableCell>TEAM</TableCell>
                             <TableCell>ROLE</TableCell>
@@ -997,7 +1032,7 @@ export default function OnboardingProgressPage() {
                         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
                           <Table size="small">
                             <TableHead>
-                              <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "#f8fafc" } }}>
+                              <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover" } }}>
                                 <TableCell>CATEGORY</TableCell>
                                 <TableCell align="center">COUNT</TableCell>
                                 <TableCell align="center">ASSIGNED MEMBERS</TableCell>
@@ -1028,7 +1063,7 @@ export default function OnboardingProgressPage() {
                       <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
                         <Table size="small">
                           <TableHead>
-                            <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "#f8fafc" } }}>
+                            <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover" } }}>
                               <TableCell>CATEGORY</TableCell>
                               <TableCell align="center">TOTAL</TableCell>
                               <TableCell align="center">ASSIGNED</TableCell>
@@ -1064,7 +1099,7 @@ export default function OnboardingProgressPage() {
                       <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
                         <Table size="small">
                           <TableHead>
-                            <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "#f8fafc" } }}>
+                            <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover" } }}>
                               <TableCell>CATEGORY</TableCell>
                               <TableCell align="center">TOTAL</TableCell>
                               <TableCell align="center">ACTIVE</TableCell>
@@ -1127,7 +1162,7 @@ export default function OnboardingProgressPage() {
                     <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
                       <Table size="small">
                         <TableHead>
-                          <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "#f8fafc" } }}>
+                          <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover" } }}>
                             <TableCell>MEMBER</TableCell>
                             <TableCell>TEAM</TableCell>
                             <TableCell align="center">RESOURCES</TableCell>
@@ -1192,7 +1227,7 @@ export default function OnboardingProgressPage() {
                         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
                           <Table size="small">
                             <TableHead>
-                              <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "#f8fafc" } }}>
+                              <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover" } }}>
                                 <TableCell>MEMBER</TableCell>
                                 <TableCell>TEAM</TableCell>
                                 <TableCell>BLOCKER TYPE</TableCell>
@@ -1234,7 +1269,7 @@ export default function OnboardingProgressPage() {
               <TableContainer>
                 <Table size="small">
                   <TableHead>
-                    <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "#f8fafc" } }}>
+                    <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover" } }}>
                       <TableCell>ORGANIZATION</TableCell>
                       <TableCell>TEAM</TableCell>
                       <TableCell>MEMBER</TableCell>

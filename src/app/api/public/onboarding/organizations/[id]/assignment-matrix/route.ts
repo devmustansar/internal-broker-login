@@ -33,7 +33,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     }),
     prisma.userOrganization.findMany({
       where: { organizationId },
-      select: { userId: true, role: true, updatedAt: true },
+      select: { userId: true, role: true, updatedAt: true, user: { select: { name: true, email: true } } },
       orderBy: { role: "asc" },
     }),
   ]);
@@ -133,7 +133,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
     return {
       memberId: m.userId,
-      displayLabel: anonymizeLabel(i, m.role),
+      displayLabel: m.user.name || m.user.email || anonymizeLabel(i, m.role),
       teamName: userTeamMap.get(m.userId) ?? null,
       requiredResources: totalResources,
       assignedResources,

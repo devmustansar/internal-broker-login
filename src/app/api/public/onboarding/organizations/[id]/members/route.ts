@@ -35,7 +35,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       userId: true,
       role: true,
       updatedAt: true,
-      user: { select: { id: true, updatedAt: true } },
+      user: { select: { id: true, name: true, email: true, updatedAt: true } },
     },
     orderBy: { role: "asc" },
   });
@@ -104,7 +104,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
     return {
       memberId: m.userId,
-      displayLabel: anonymizeLabel(i, m.role),
+      displayLabel: m.user.name || m.user.email || anonymizeLabel(i, m.role),
       teamName: userTeamMap.get(m.userId) ?? null,
       roleInOrg: m.role,
       deviceStatus: "not_required" as const,

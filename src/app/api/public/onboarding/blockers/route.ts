@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     select: {
       id: true,
       name: true,
-      users: { select: { userId: true, role: true } },
+      users: { select: { userId: true, role: true, user: { select: { name: true, email: true } } } },
       resources: { where: { isActive: true }, select: { id: true } },
       awsResources: { where: { isActive: true }, select: { id: true } },
       sharedCredentials: { select: { id: true } },
@@ -90,8 +90,8 @@ export async function GET(req: NextRequest) {
       if (!userTeamMap.has(gm.userId)) userTeamMap.set(gm.userId, gm.group.name);
     }
 
-    org.users.forEach(({ userId, role }, i) => {
-      const label = anonymizeLabel(i, role);
+    org.users.forEach(({ userId, role, user }, i) => {
+      const label = user.name || user.email || anonymizeLabel(i, role);
       const teamName = userTeamMap.get(userId) ?? null;
 
       if (!usersWithSession.has(userId)) {
