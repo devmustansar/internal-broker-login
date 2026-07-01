@@ -848,6 +848,35 @@ const STS_MAX_DURATION_SECONDS = 43200; // 12 hours
 
 export const awsFederationService = {
   /**
+   * SSO federation flow: already-obtained STS credentials → SigninToken → console login URL.
+   * Used by the aws_sso strategy where credentials come from sso:GetRoleCredentials.
+   * Skips the STS call entirely — credentials are passed in directly.
+   */
+  async generateConsoleLoginUrlFromCredentials(
+    credentials: { accessKeyId: string; secretAccessKey: string; sessionToken: string; expiration: number },
+    config: Pick<AwsResourceConfig, "destination" | "issuer" | "awsAccountId" | "sessionDurationSeconds">
+  ): Promise<AwsFederationResult> {
+    validateDestination(config.destination);
+
+    const tmpCreds: AwsTemporaryCredentials = {
+      sessionId: credentials.accessKeyId,
+      sessionKey: credentials.secretAccessKey,
+      sessionToken: credentials.sessionToken,
+      expiration: new Date(credentials.expiration),
+    };
+
+    const durationSeconds = clampDuration(config.sessionDurationSeconds ?? 3600);
+    const signinToken = await getSigninToken(tmpCreds, durationSeconds);
+    const loginUrl = buildLoginUrl(signinToken, config as AwsResourceConfig);
+
+    return {
+      loginUrl,
+      expiresAt: tmpCreds.expiration.toISOString(),
+      awsAccountId: config.awsAccountId,
+    };
+  },
+
+  /**
    * Full federation flow: STS credentials → SigninToken → console login URL.
    *
    * @param config     - Resource configuration (roleArn, destination, etc.)

@@ -219,8 +219,15 @@ model AwsResource {
   externalId           String?
   /// Key used to look up broker IAM credentials from SecretsProvider, e.g. "aws/broker/default"
   brokerCredentialRef  String
-  /// "assume_role" (preferred) or "federation_token" (fallback)
+  /// "assume_role" (preferred), "federation_token" (fallback), or "aws_sso" (Identity Center redirect)
   stsStrategy          String   @default("assume_role")
+  /// SSO Identity Center start URL — required when stsStrategy is "aws_sso"
+  /// e.g. "https://d-xxxxxxxxxx.awsapps.com/start"
+  ssoStartUrl          String?
+  /// SSO permission set name — e.g. "AdministratorAccess"
+  ssoPermissionSetName String?
+  /// AWS region where the SSO Identity Center instance lives — e.g. "us-west-2"
+  ssoRegion            String?
   /// IAM managed policy ARNs available for selection when assigning this resource to users
   availablePolicyArns  String[]
   /// Whether this resource appears in the portal

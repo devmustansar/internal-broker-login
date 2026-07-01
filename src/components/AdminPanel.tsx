@@ -697,6 +697,11 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
   const [detectedCallerArn, setDetectedCallerArn] = useState<string | null>(null);
   const [detectedAuthType, setDetectedAuthType] = useState<string | null>(null);
   const [detectedSsoInfo, setDetectedSsoInfo] = useState<{ permissionSetName: string; hasInlinePolicy: boolean } | null>(null);
+  const [ssoWizardOpen, setSsoWizardOpen] = useState(false);
+  const [ssoWizardStep, setSsoWizardStep] = useState<"idle" | "loading" | "ready" | "polling" | "success" | "expired" | "error">("idle");
+  const [ssoWizardData, setSsoWizardData] = useState<{ verificationUri: string; verificationUriComplete: string; userCode: string; expiresIn: number } | null>(null);
+  const [ssoWizardError, setSsoWizardError] = useState<string | null>(null);
+  const [ssoConnected, setSsoConnected] = useState<boolean | null>(null);
   const [formData, setFormData] = useState({
     name: initialData?.name || "",
     awsAccountId: initialData?.awsAccountId || "",
@@ -707,6 +712,9 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
     sessionDurationSeconds: initialData?.sessionDurationSeconds || 3600,
     externalId: initialData?.externalId || "",
     stsStrategy: initialData?.stsStrategy || "federation_token",
+    ssoStartUrl: (initialData as any)?.ssoStartUrl || "",
+    ssoPermissionSetName: (initialData as any)?.ssoPermissionSetName || "",
+    ssoRegion: (initialData as any)?.ssoRegion || "",
     environment: initialData?.environment || "production",
     description: initialData?.description || "",
     organizationId: initialData?.organizationId || "",
@@ -742,6 +750,9 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
       sessionDurationSeconds: resource.sessionDurationSeconds || 3600,
       externalId: resource.externalId || "",
       stsStrategy: resource.stsStrategy || "federation_token",
+      ssoStartUrl: resource.ssoStartUrl || "",
+      ssoPermissionSetName: resource.ssoPermissionSetName || "",
+      ssoRegion: resource.ssoRegion || "",
       environment: resource.environment || "production",
       description: resource.description || "",
       organizationId: resource.organizationId || prev.organizationId,
@@ -772,6 +783,73 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
 
     fetchCredentials();
   }, [initialData]);
+
+  useEffect(() => {
+    if (!initialData?.resourceKey || formData.stsStrategy !== "aws_sso") return;
+    const ref = `aws/resource/${initialData.resourceKey}/sso-oidc`;
+    fetch(`/api/admin/secrets?secretRef=${encodeURIComponent(ref)}&kind=aws_sso_oidc`)
+      .then((r) => setSsoConnected(r.ok))
+      .catch(() => setSsoConnected(false));
+  }, [initialData?.resourceKey, formData.stsStrategy]);
+
+  const handleSsoConnect = async () => {
+    if (!initialData?.resourceKey) return;
+    setSsoWizardOpen(true);
+    setSsoWizardStep("loading");
+    setSsoWizardData(null);
+    setSsoWizardError(null);
+    try {
+      const res = await fetch("/api/admin/aws/sso/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resourceKey: initialData.resourceKey,
+          ssoStartUrl: formData.ssoStartUrl,
+          ssoRegion: formData.ssoRegion || formData.region || "us-east-1",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to start SSO setup");
+      setSsoWizardData(data);
+      setSsoWizardStep("ready");
+      // Start polling
+      const pollInterval = setInterval(async () => {
+        try {
+          const pollRes = await fetch("/api/admin/aws/sso/activate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resourceKey: initialData.resourceKey }),
+          });
+          const pollData = await pollRes.json();
+          if (pollData.status === "success") {
+            clearInterval(pollInterval);
+            setSsoWizardStep("success");
+            setSsoConnected(true);
+          } else if (pollData.status === "expired") {
+            clearInterval(pollInterval);
+            setSsoWizardStep("expired");
+          } else if (pollData.status === "error") {
+            clearInterval(pollInterval);
+            setSsoWizardStep("error");
+            setSsoWizardError(pollData.error || "AWS returned an unexpected error during device code exchange.");
+          }
+          // "pending" → do nothing, keep polling
+        } catch {
+          clearInterval(pollInterval);
+          setSsoWizardStep("error");
+          setSsoWizardError("Polling failed — check network and try again.");
+        }
+      }, 5000);
+      // Safety timeout matching expiresIn
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setSsoWizardStep((prev) => (prev === "ready" || prev === "polling") ? "expired" : prev);
+      }, (data.expiresIn || 600) * 1000);
+    } catch (err: any) {
+      setSsoWizardStep("error");
+      setSsoWizardError(err.message || "Unknown error");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -819,6 +897,9 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
           sessionDurationSeconds: 3600,
           externalId: "",
           stsStrategy: "federation_token",
+          ssoStartUrl: "",
+          ssoPermissionSetName: "",
+          ssoRegion: "",
           environment: "production",
           description: "",
           organizationId: "",
@@ -960,6 +1041,7 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
             >
               <MenuItem value="assume_role">Assume Role (STS)</MenuItem>
               <MenuItem value="federation_token">Federation Token (Identity)</MenuItem>
+              <MenuItem value="aws_sso">AWS SSO (Identity Center)</MenuItem>
             </Select>
           </FormControl>
           {formData.stsStrategy === "federation_token" && (
@@ -970,32 +1052,124 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
               </Typography>
             </Box>
           )}
+          {formData.stsStrategy === "aws_sso" && (
+            <Box sx={{ mt: 1, px: 1.5, py: 1, bgcolor: "info.main", opacity: 0.85, borderRadius: 2 }}>
+              <Typography variant="caption" sx={{ color: "info.contrastText", fontWeight: 600, display: "block" }}>
+                AWS SSO mode: users are redirected to the Identity Center access portal — no broker IAM credentials needed. Provide the SSO start URL below.
+              </Typography>
+            </Box>
+          )}
         </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>SESSION NAME</Typography>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="e.g. broker-session (leave blank to use user email)"
-            value={formData.sessionName}
-            onChange={(e) => setFormData({ ...formData, sessionName: e.target.value })}
-            helperText="Appears as RoleSessionName in CloudTrail. Blank = authenticated user's email."
-            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>SESSION TTL (SECONDS)</Typography>
-          <TextField
-            fullWidth
-            type="number"
-            variant="outlined"
-            value={formData.sessionDurationSeconds}
-            onChange={(e) => setFormData({ ...formData, sessionDurationSeconds: Number(e.target.value) })}
-            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
-          />
-        </Grid>
+        {formData.stsStrategy === "aws_sso" && (
+          <Grid size={12}>
+            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>SSO START URL <Typography component="span" variant="caption" sx={{ color: 'error.main' }}>*</Typography></Typography>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="https://d-xxxxxxxxxx.awsapps.com/start"
+              value={formData.ssoStartUrl}
+              onChange={(e) => setFormData({ ...formData, ssoStartUrl: e.target.value })}
+              required={formData.stsStrategy === "aws_sso"}
+              helperText="Your access portal URL — found in IAM Identity Center → Dashboard → AWS access portal URL. Not the identitycenter.amazonaws.com URL shown in the Get credentials dialog."
+              sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+            />
+          </Grid>
+        )}
+        {formData.stsStrategy === "aws_sso" && (
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>PERMISSION SET NAME <Typography component="span" variant="caption" sx={{ color: 'text.disabled', ml: 0.5 }}>optional</Typography></Typography>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="e.g. AdministratorAccess"
+              value={formData.ssoPermissionSetName}
+              onChange={(e) => setFormData({ ...formData, ssoPermissionSetName: e.target.value })}
+              helperText="When set, users are deep-linked directly to this account + permission set"
+              sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+            />
+          </Grid>
+        )}
+        {formData.stsStrategy === "aws_sso" && (
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>SSO REGION <Typography component="span" variant="caption" sx={{ color: 'text.disabled', ml: 0.5 }}>required</Typography></Typography>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="us-east-1"
+              value={formData.ssoRegion}
+              onChange={(e) => setFormData({ ...formData, ssoRegion: e.target.value })}
+              helperText="AWS region of your IAM Identity Center instance"
+              sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+            />
+          </Grid>
+        )}
+        {formData.stsStrategy === "aws_sso" && initialData?.resourceKey && (
+          <Grid size={12}>
+            <Box sx={{ p: 2.5, borderRadius: 3, border: `1px solid ${alpha(ssoConnected ? theme.palette.success.main : theme.palette.warning.main, 0.4)}`, bgcolor: alpha(ssoConnected ? theme.palette.success.main : theme.palette.warning.main, 0.04) }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1.5}>
+                <Stack direction="row" alignItems="center" gap={1.5}>
+                  <ShieldCheck size={18} color={ssoConnected ? theme.palette.success.main : theme.palette.warning.main} />
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: ssoConnected ? "success.main" : "warning.main" }}>
+                      {ssoConnected === null ? "Checking SSO connection…" : ssoConnected ? "SSO Connected" : "SSO Not Connected"}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {ssoConnected
+                        ? "Refresh token is stored. Users can launch the console without entering credentials."
+                        : "Complete device authorization so the broker can generate temporary credentials on each tile click."}
+                    </Typography>
+                  </Box>
+                </Stack>
+                <Button
+                  type="button"
+                  variant={ssoConnected ? "outlined" : "contained"}
+                  size="small"
+                  onClick={handleSsoConnect}
+                  disabled={!formData.ssoStartUrl || !formData.ssoRegion}
+                  startIcon={<KeyRound size={14} />}
+                  sx={{ borderRadius: 2, fontWeight: 700, textTransform: "none", whiteSpace: "nowrap" }}
+                >
+                  {ssoConnected ? "Re-connect SSO" : "Connect SSO"}
+                </Button>
+              </Stack>
+              {(!formData.ssoStartUrl || !formData.ssoRegion) && (
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+                  Fill in SSO Start URL and SSO Region above, then save before connecting.
+                </Typography>
+              )}
+            </Box>
+          </Grid>
+        )}
+        {formData.stsStrategy !== "aws_sso" && (
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>SESSION NAME</Typography>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="e.g. broker-session (leave blank to use user email)"
+              value={formData.sessionName}
+              onChange={(e) => setFormData({ ...formData, sessionName: e.target.value })}
+              helperText="Appears as RoleSessionName in CloudTrail. Blank = authenticated user's email."
+              sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+            />
+          </Grid>
+        )}
+        {formData.stsStrategy !== "aws_sso" && (
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>SESSION TTL (SECONDS)</Typography>
+            <TextField
+              fullWidth
+              type="number"
+              variant="outlined"
+              value={formData.sessionDurationSeconds}
+              onChange={(e) => setFormData({ ...formData, sessionDurationSeconds: Number(e.target.value) })}
+              sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+            />
+          </Grid>
+        )}
 
-        {/* IAM Credentials Section */}
+        {/* IAM Credentials Section — hidden for AWS SSO (no broker creds needed) */}
+        {formData.stsStrategy !== "aws_sso" && (
         <Grid size={12}>
           <Divider sx={{ my: 4 }}>
             <Chip
@@ -1005,47 +1179,54 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
             />
           </Divider>
         </Grid>
+        )}
 
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>ACCESS KEY ID</Typography>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="AKIA..."
-            value={formData.accessKeyId}
-            onChange={(e) => { setFormData({ ...formData, accessKeyId: e.target.value }); setDetectedPolicies(null); setDetectedCallerArn(null); setDetectedAuthType(null); setDetectedSsoInfo(null); }}
-            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
-          />
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>SECRET ACCESS KEY</Typography>
-          <TextField
-            fullWidth
-            type="password"
-            variant="outlined"
-            placeholder="••••••••••••"
-            value={formData.secretAccessKey}
-            onChange={(e) => { setFormData({ ...formData, secretAccessKey: e.target.value }); setDetectedPolicies(null); setDetectedCallerArn(null); setDetectedAuthType(null); setDetectedSsoInfo(null); }}
-            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
-          />
-        </Grid>
-        <Grid size={12}>
-          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>
-            SESSION TOKEN
-            <Typography component="span" variant="caption" sx={{ ml: 1, fontWeight: 400, color: 'text.disabled' }}>
-              optional — required for AWS SSO / temporary credentials (not stored)
+        {formData.stsStrategy !== "aws_sso" && (
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>ACCESS KEY ID</Typography>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="AKIA..."
+              value={formData.accessKeyId}
+              onChange={(e) => { setFormData({ ...formData, accessKeyId: e.target.value }); setDetectedPolicies(null); setDetectedCallerArn(null); setDetectedAuthType(null); setDetectedSsoInfo(null); }}
+              sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+            />
+          </Grid>
+        )}
+        {formData.stsStrategy !== "aws_sso" && (
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>SECRET ACCESS KEY</Typography>
+            <TextField
+              fullWidth
+              type="password"
+              variant="outlined"
+              placeholder="••••••••••••"
+              value={formData.secretAccessKey}
+              onChange={(e) => { setFormData({ ...formData, secretAccessKey: e.target.value }); setDetectedPolicies(null); setDetectedCallerArn(null); setDetectedAuthType(null); setDetectedSsoInfo(null); }}
+              sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+            />
+          </Grid>
+        )}
+        {formData.stsStrategy !== "aws_sso" && (
+          <Grid size={12}>
+            <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>
+              SESSION TOKEN
+              <Typography component="span" variant="caption" sx={{ ml: 1, fontWeight: 400, color: 'text.disabled' }}>
+                optional — required for temporary credentials (not stored)
+              </Typography>
             </Typography>
-          </Typography>
-          <TextField
-            fullWidth
-            type="password"
-            variant="outlined"
-            placeholder="Leave blank for long-term IAM credentials"
-            value={formData.sessionToken}
-            onChange={(e) => { setFormData({ ...formData, sessionToken: e.target.value }); setDetectedPolicies(null); setDetectedCallerArn(null); setDetectedAuthType(null); setDetectedSsoInfo(null); }}
-            sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
-          />
-        </Grid>
+            <TextField
+              fullWidth
+              type="password"
+              variant="outlined"
+              placeholder="Leave blank for long-term IAM credentials"
+              value={formData.sessionToken}
+              onChange={(e) => { setFormData({ ...formData, sessionToken: e.target.value }); setDetectedPolicies(null); setDetectedCallerArn(null); setDetectedAuthType(null); setDetectedSsoInfo(null); }}
+              sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace' } }}
+            />
+          </Grid>
+        )}
         <Grid size={12}>
           <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>CONSOLE HANDOFF TARGET</Typography>
           <TextField
@@ -1214,6 +1395,105 @@ function AwsResourceForm({ onSuccess, onError, initialData, onCancelEdit }: Admi
           </Stack>
         </Grid>
       </Grid>
+
+      {/* SSO Device Auth Wizard Dialog */}
+      <Dialog open={ssoWizardOpen} onClose={() => ssoWizardStep !== "ready" && setSsoWizardOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 4 } }}>
+        <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>
+          {ssoWizardStep === "success" ? "SSO Connected" : ssoWizardStep === "expired" ? "Authorization Expired" : ssoWizardStep === "error" ? "Setup Failed" : "Connect AWS SSO"}
+        </DialogTitle>
+        <DialogContent>
+          {(ssoWizardStep === "idle" || ssoWizardStep === "loading") && (
+            <Stack alignItems="center" gap={2} py={3}>
+              <CircularProgress size={36} />
+              <Typography color="text.secondary">Starting device authorization…</Typography>
+            </Stack>
+          )}
+          {(ssoWizardStep === "ready" || ssoWizardStep === "polling") && ssoWizardData && (
+            <Stack gap={2.5}>
+              <Alert severity="info" sx={{ borderRadius: 2 }}>
+                Open the link below in your browser and enter the code to approve access. This tab will update automatically once approved.
+              </Alert>
+              <Box sx={{ p: 2, bgcolor: "action.hover", borderRadius: 2 }}>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: "text.secondary", letterSpacing: "0.1em", display: "block", mb: 0.5 }}>VERIFICATION URL</Typography>
+                <Typography variant="body2" sx={{ fontFamily: "monospace", wordBreak: "break-all", color: "primary.main" }}>
+                  {ssoWizardData.verificationUriComplete || ssoWizardData.verificationUri}
+                </Typography>
+              </Box>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                <Box sx={{ flex: 1, p: 2, bgcolor: "action.hover", borderRadius: 2 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 800, color: "text.secondary", letterSpacing: "0.1em", display: "block", mb: 0.5 }}>USER CODE</Typography>
+                  <Typography variant="h5" sx={{ fontFamily: "monospace", letterSpacing: "0.25em", fontWeight: 800 }}>
+                    {ssoWizardData.userCode}
+                  </Typography>
+                </Box>
+                <Stack gap={1}>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    onClick={() => window.open(ssoWizardData.verificationUriComplete || ssoWizardData.verificationUri, "_blank")}
+                    sx={{ borderRadius: 2, fontWeight: 700, textTransform: "none", whiteSpace: "nowrap" }}
+                  >
+                    Open in Browser
+                  </Button>
+                </Stack>
+              </Box>
+              <Stack direction="row" alignItems="center" gap={1.5}>
+                <CircularProgress size={14} />
+                <Typography variant="caption" color="text.secondary">
+                  Waiting for approval… This dialog will update automatically. Expires in {Math.round((ssoWizardData.expiresIn || 600) / 60)} minutes.
+                </Typography>
+              </Stack>
+            </Stack>
+          )}
+          {ssoWizardStep === "success" && (
+            <Stack alignItems="center" gap={2} py={3}>
+              <ShieldCheck size={48} color={theme.palette.success.main} />
+              <Typography variant="h6" sx={{ fontWeight: 800, color: "success.main" }}>SSO Authorization Approved</Typography>
+              <Typography color="text.secondary" textAlign="center">
+                The refresh token is now stored. Users will be automatically logged into the AWS Console when they click this tile — no credentials needed.
+              </Typography>
+            </Stack>
+          )}
+          {ssoWizardStep === "expired" && (
+            <Stack alignItems="center" gap={2} py={3}>
+              <AlertCircle size={48} color={theme.palette.warning.main} />
+              <Typography variant="h6" sx={{ fontWeight: 800, color: "warning.main" }}>Authorization Expired</Typography>
+              <Typography color="text.secondary" textAlign="center">
+                The device code expired before it was approved. Click "Try Again" to start a new authorization.
+              </Typography>
+            </Stack>
+          )}
+          {ssoWizardStep === "error" && (
+            <Stack alignItems="center" gap={2} py={3}>
+              <AlertCircle size={48} color={theme.palette.error.main} />
+              <Typography variant="h6" sx={{ fontWeight: 800, color: "error.main" }}>Setup Failed</Typography>
+              <Typography color="text.secondary" textAlign="center">{ssoWizardError}</Typography>
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+          {ssoWizardStep === "success" && (
+            <Button variant="contained" onClick={() => setSsoWizardOpen(false)} sx={{ borderRadius: 2, fontWeight: 700, textTransform: "none" }}>
+              Done
+            </Button>
+          )}
+          {(ssoWizardStep === "expired" || ssoWizardStep === "error") && (
+            <>
+              <Button variant="outlined" onClick={() => setSsoWizardOpen(false)} sx={{ borderRadius: 2, fontWeight: 700, textTransform: "none" }}>
+                Cancel
+              </Button>
+              <Button variant="contained" onClick={handleSsoConnect} sx={{ borderRadius: 2, fontWeight: 700, textTransform: "none" }}>
+                Try Again
+              </Button>
+            </>
+          )}
+          {(ssoWizardStep === "ready" || ssoWizardStep === "polling") && (
+            <Button variant="outlined" color="error" onClick={() => setSsoWizardOpen(false)} sx={{ borderRadius: 2, fontWeight: 700, textTransform: "none" }}>
+              Cancel
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

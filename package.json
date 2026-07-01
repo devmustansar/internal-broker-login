@@ -14,7 +14,9 @@
   },
   "dependencies": {
     "@aws-sdk/client-iam": "^3.1075.0",
+    "@aws-sdk/client-sso": "^3.1077.0",
     "@aws-sdk/client-sso-admin": "^3.1075.0",
+    "@aws-sdk/client-sso-oidc": "^3.1077.0",
     "@aws-sdk/client-sts": "^3.1023.0",
     "@aws-sdk/credential-providers": "^3.1023.0",
     "@emotion/react": "^11.14.0",

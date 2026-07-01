@@ -25,6 +25,8 @@ export type SecretProviderType = "database" | "vault" | "hybrid";
  */
 export type SecretKind =
   | "aws_iam_credentials"      // AWS IAM access key + secret
+  | "aws_sso_oidc"             // AWS SSO OIDC refresh token + client credentials
+  | "aws_sso_oidc_pending"     // Temporary device auth session (cleared after activation)
   | "web_basic_credentials"    // username + password for web apps (JSON/form login)
   | "jira_api_token"           // Jira/Atlassian cloud API token
   | "generic_key_value";       // Escape hatch — arbitrary key/value blob
@@ -51,6 +53,24 @@ export interface JiraApiToken {
   apiToken: string;
 }
 
+export interface AwsSsoOidcCredentials {
+  clientId: string;
+  clientSecret: string;
+  /** Empty string when Identity Center did not issue a refresh token at setup time */
+  refreshToken: string;
+  /** Stored so we can use it directly when no refresh token was issued */
+  accessToken?: string;
+  ssoRegion: string;
+}
+
+export interface AwsSsoOidcPending {
+  clientId: string;
+  clientSecret: string;
+  deviceCode: string;
+  ssoRegion: string;
+  ssoStartUrl: string;
+}
+
 export interface GenericKeyValue {
   [key: string]: string;
 }
@@ -58,6 +78,8 @@ export interface GenericKeyValue {
 /** Map each SecretKind to its payload type (used in generic helpers) */
 export interface SecretPayloadMap {
   aws_iam_credentials: AwsIamCredentials;
+  aws_sso_oidc: AwsSsoOidcCredentials;
+  aws_sso_oidc_pending: AwsSsoOidcPending;
   web_basic_credentials: WebBasicCredentials;
   jira_api_token: JiraApiToken;
   generic_key_value: GenericKeyValue;

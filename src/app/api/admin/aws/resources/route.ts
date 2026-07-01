@@ -54,7 +54,6 @@ export async function POST(req: NextRequest) {
 
     const strategy = body.stsStrategy ?? "assume_role";
 
-    // roleArn is required for assume_role, optional for federation_token
     if (strategy === "assume_role") {
       if (!body.roleArn || typeof body.roleArn !== "string") {
         return badRequest("roleArn is required when stsStrategy is 'assume_role'");
@@ -68,6 +67,15 @@ export async function POST(req: NextRequest) {
           `AssumeRole requires arn:aws:iam::ACCOUNT:role/ROLE_NAME. ` +
           `Either fix the ARN or change stsStrategy to 'federation_token'.`
         );
+      }
+    }
+
+    if (strategy === "aws_sso") {
+      if (!body.ssoStartUrl || typeof body.ssoStartUrl !== "string") {
+        return badRequest("ssoStartUrl is required when stsStrategy is 'aws_sso'");
+      }
+      if (!body.ssoStartUrl.startsWith("https://")) {
+        return badRequest("ssoStartUrl must be a valid HTTPS URL");
       }
     }
 
@@ -92,6 +100,9 @@ export async function POST(req: NextRequest) {
       externalId: body.externalId,
       brokerCredentialRef: `aws/resource/${resourceKey}`,
       stsStrategy: body.stsStrategy ?? "assume_role",
+      ssoStartUrl: body.ssoStartUrl?.trim() || null,
+      ssoPermissionSetName: body.ssoPermissionSetName?.trim() || null,
+      ssoRegion: body.ssoRegion?.trim() || null,
       environment: body.environment ?? "production",
       organizationId: body.organizationId || null,
       availablePolicyArns: Array.isArray(body.availablePolicyArns) ? body.availablePolicyArns : [],
@@ -137,6 +148,12 @@ export async function PUT(req: NextRequest) {
       }
     }
 
+    if (putStrategy === "aws_sso") {
+      if (!data.ssoStartUrl || !data.ssoStartUrl.startsWith("https://")) {
+        return badRequest("ssoStartUrl is required and must be a valid HTTPS URL when stsStrategy is 'aws_sso'");
+      }
+    }
+
     // Verify org scope on existing resource
     const existing = await prisma.awsResource.findUnique({ where: { id: data.id } });
     if (!existing) return badRequest("AWS Resource not found");
@@ -165,6 +182,9 @@ export async function PUT(req: NextRequest) {
         externalId: data.externalId || null,
         brokerCredentialRef: `aws/resource/${existing.resourceKey}`,
         stsStrategy: data.stsStrategy,
+        ssoStartUrl: data.ssoStartUrl?.trim() || null,
+        ssoPermissionSetName: data.ssoPermissionSetName?.trim() || null,
+        ssoRegion: data.ssoRegion?.trim() || null,
         sessionName: data.sessionName?.trim() || null,
         ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
         environment: data.environment,

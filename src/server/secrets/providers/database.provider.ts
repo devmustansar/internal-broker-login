@@ -67,14 +67,25 @@ export class DatabaseSecretsProvider implements SecretsProvider {
 
     const encryptedPayload = encryptPayload(payload);
 
-    const row = await prisma.storedSecret.create({
-      data: {
+    // Use upsert so that soft-deleted rows with the same secretRef are
+    // reactivated rather than causing a unique-constraint violation.
+    const row = await prisma.storedSecret.upsert({
+      where: { secretRef },
+      create: {
         secretRef,
         kind,
         encryptedPayload,
         metadata: metadata as object,
         provider: "database",
         version: 1,
+      },
+      update: {
+        kind,
+        encryptedPayload,
+        metadata: metadata as object,
+        provider: "database",
+        version: 1,
+        deletedAt: null,
       },
     });
 

@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import type { AwsResourceConfig, AwsFederationResult } from "@/types";
 import { auditLogService } from "./audit.service";
 import { awsFederationService, AwsStsError, AwsFederationError, AwsValidationError } from "./aws-federation.service";
+import { awsSsoOidcService } from "./aws-sso-oidc.service";
 import { secretManager } from "@/server/secrets/secret-manager";
+import type { AwsSsoOidcCredentials } from "@/server/secrets/types";
 import { appAccessService } from "./app-access.service";
 
 // ─── AWS Broker Service ───────────────────────────────────────────────────────
@@ -27,14 +29,14 @@ export interface AwsLaunchRequest {
 export interface AwsLaunchResponse {
   /** UUID for this launch event — useful for support lookups */
   launchId: string;
-  /** The AWS Console federation login URL including SigninToken */
+  /** The AWS Console federation login URL including SigninToken, or an SSO portal URL */
   loginUrl: string;
-  /** ISO timestamp when the STS credentials (and therefore this URL) expire */
+  /** ISO timestamp when the STS credentials expire — empty string for aws_sso redirects */
   expiresAt: string;
   /** AWS account ID, for display in the portal */
   awsAccountId: string;
-  /** IAM role that was assumed */
-  roleArn: string;
+  /** IAM role that was assumed — undefined for aws_sso strategy */
+  roleArn?: string;
 }
 
 export const awsBrokerService = {
@@ -113,8 +115,10 @@ export const awsBrokerService = {
       externalId: awsResource.externalId ?? undefined,
       brokerCredentialRef: awsResource.brokerCredentialRef,
       stsStrategy: awsResource.stsStrategy as AwsResourceConfig["stsStrategy"],
-      // Custom session name configured per-resource (optional)
       sessionName: awsResource.sessionName ?? undefined,
+      ssoStartUrl: awsResource.ssoStartUrl ?? undefined,
+      ssoPermissionSetName: awsResource.ssoPermissionSetName ?? undefined,
+      ssoRegion: awsResource.ssoRegion ?? undefined,
     };
 
     // ── Step 3b: Look up user-specific session policies ──────────────────────
@@ -161,6 +165,115 @@ export const awsBrokerService = {
       console.log(
         `[aws-broker] Using per-user session name "${userPolicy.sessionName}" for ${user.email} on ${resourceKey}`
       );
+    }
+
+    // ── Step 3c: AWS SSO OIDC flow ───────────────────────────────────────────
+    // For aws_sso resources the broker uses a stored refresh token to get
+    // fresh temporary credentials on every tile click — no user input ever.
+    if (config.stsStrategy === "aws_sso") {
+      if (!config.ssoPermissionSetName) {
+        throw new Error(
+          `AWS SSO resource '${resourceKey}' has no permission set name configured.`
+        );
+      }
+
+      // Load the stored OIDC credentials (clientId, clientSecret, refreshToken, ssoRegion)
+      let oidcCreds: AwsSsoOidcCredentials;
+      try {
+        const secret = await secretManager.getSecret(
+          `aws/resource/${resourceKey}/sso-oidc`,
+          "aws_sso_oidc"
+        );
+        oidcCreds = secret.payload;
+      } catch {
+        throw new Error(
+          `AWS SSO resource '${resourceKey}' is not connected yet. ` +
+          `Complete the SSO setup in Admin → AWS Resources.`
+        );
+      }
+
+      // Use refresh token to get a fresh access token, or fall back to stored
+      // access token when no refresh token was issued at setup time.
+      let tokens: { accessToken: string; refreshToken: string };
+      if (oidcCreds.refreshToken) {
+        try {
+          tokens = await awsSsoOidcService.refreshAccessToken(
+            oidcCreds.ssoRegion,
+            oidcCreds.clientId,
+            oidcCreds.clientSecret,
+            oidcCreds.refreshToken
+          );
+        } catch (err: any) {
+          const errorId: string = err?.name ?? err?.code ?? "";
+          const oauthError: string = err?.error ?? "";
+          const isExpired =
+            errorId.includes("Expired") ||
+            errorId.includes("InvalidGrant") ||
+            oauthError === "invalid_grant" ||
+            oauthError === "expired_token";
+          throw new Error(
+            isExpired
+              ? `AWS SSO session expired for resource '${resourceKey}'. Re-run SSO setup in Admin → AWS Resources.`
+              : `AWS SSO token refresh failed for resource '${resourceKey}': ${err?.message ?? "unknown error"}`
+          );
+        }
+
+        // If AWS rotated the refresh token, persist the new one
+        if (tokens.refreshToken && tokens.refreshToken !== oidcCreds.refreshToken) {
+          await secretManager.updateSecret(`aws/resource/${resourceKey}/sso-oidc`, {
+            payload: { ...oidcCreds, refreshToken: tokens.refreshToken },
+          }).catch(() => {});
+        }
+      } else {
+        // No refresh token was issued — use the stored access token directly.
+        // Valid for ~8 hours; if it has expired the GetRoleCredentials call below will
+        // throw and the error handler will tell the user to re-connect.
+        if (!oidcCreds.accessToken) {
+          throw new Error(
+            `AWS SSO resource '${resourceKey}' has no refresh token and no stored access token. ` +
+            `Re-run SSO setup in Admin → AWS Resources.`
+          );
+        }
+        tokens = { accessToken: oidcCreds.accessToken, refreshToken: "" };
+      }
+
+      // Exchange access token for temporary AWS credentials for this account + permission set
+      const roleCreds = await awsSsoOidcService.getRoleCredentials(
+        oidcCreds.ssoRegion,
+        tokens.accessToken,
+        config.awsAccountId,
+        config.ssoPermissionSetName
+      );
+
+      // Use the credentials directly with the federation endpoint — no STS call
+      const federationResult = await awsFederationService.generateConsoleLoginUrlFromCredentials(
+        roleCreds,
+        config
+      );
+
+      auditLogService.log({
+        action: "aws_console_redirect_issued",
+        internalUserId,
+        resourceKey,
+        outcome: "success",
+        details: {
+          launchId,
+          awsAccountId: config.awsAccountId,
+          stsStrategy: "aws_sso",
+          ssoPermissionSetName: config.ssoPermissionSetName,
+          expiresAt: federationResult.expiresAt,
+          ipAddress,
+          userAgent,
+        },
+        ipAddress,
+      });
+
+      return {
+        launchId,
+        loginUrl: federationResult.loginUrl,
+        expiresAt: federationResult.expiresAt,
+        awsAccountId: config.awsAccountId,
+      };
     }
 
     // ── Step 4: Load broker IAM credentials from SecretsProvider ─────────────
@@ -342,6 +455,9 @@ export const awsBrokerService = {
     externalId?: string;
     brokerCredentialRef: string;
     stsStrategy?: string;
+    ssoStartUrl?: string | null;
+    ssoPermissionSetName?: string | null;
+    ssoRegion?: string | null;
     environment?: string;
     organizationId?: string | null;
     availablePolicyArns?: string[];

@@ -64,6 +64,22 @@ interface AwsCredentials {
   sessionToken?: string;
 }
 
+// AWS SSO Admin is a regional service — the instance lives in one fixed home
+// region. We don't know which one, so probe in order of popularity.
+const SSO_CANDIDATE_REGIONS = [
+  "us-east-1",
+  "us-west-2",
+  "us-east-2",
+  "us-west-1",
+  "eu-west-1",
+  "eu-west-2",
+  "eu-central-1",
+  "ap-southeast-1",
+  "ap-northeast-1",
+  "ap-south-1",
+  "ca-central-1",
+];
+
 /**
  * Discover all policies attached to the SSO permission set that generated the
  * caller's temporary credentials.
@@ -71,38 +87,58 @@ interface AwsCredentials {
  * @param credentials  AWS credentials (AK + SK + optional session token)
  * @param accountId    AWS account ID from GetCallerIdentity
  * @param roleName     The assumed-role portion of the ARN, e.g. "AWSReservedSSO_AdminAccess_abc123"
- * @param region       AWS region where the SSO instance lives (defaults to us-east-1)
+ * @param hintRegion   Hint for which region to try first (the resource's configured region)
  */
 export async function discoverSsoPermissionSetPolicies(
   credentials: AwsCredentials,
   accountId: string,
   roleName: string,
-  region = "us-east-1"
+  hintRegion = "us-east-1"
 ): Promise<SsoDiscoveryResult | { error: string }> {
   const permissionSetName = extractPermissionSetFromRoleName(roleName);
   if (!permissionSetName) {
     return { error: `Could not parse permission set name from role "${roleName}"` };
   }
 
-  // SSO Admin uses the SSO instance's home region — try the provided region first.
-  const client = new SSOAdminClient({ region, credentials });
+  // ── Step 1: Find the SSO instance (probe regions until we find it) ─────────
+  // SSO Admin is regional — the instance's home region may differ from the
+  // resource's region. Try the hint first, then fall back through common regions.
+  const regionOrder = [
+    hintRegion,
+    ...SSO_CANDIDATE_REGIONS.filter((r) => r !== hintRegion),
+  ];
 
-  // ── Step 1: Find the SSO instance ─────────────────────────────────────────
-  let instanceArn: string;
-  let identityStoreId: string;
-  try {
-    const resp = await client.send(new ListInstancesCommand({}));
-    const instance = resp.Instances?.[0];
-    if (!instance?.InstanceArn) {
-      return { error: "No AWS IAM Identity Center instance found in this account/region." };
+  let instanceArn: string | null = null;
+  let identityStoreId = "";
+  let activeClient: SSOAdminClient | null = null;
+  let lastError = "";
+
+  for (const candidateRegion of regionOrder) {
+    try {
+      const tryClient = new SSOAdminClient({ region: candidateRegion, credentials });
+      const resp = await tryClient.send(new ListInstancesCommand({}));
+      const instance = resp.Instances?.[0];
+      if (instance?.InstanceArn) {
+        instanceArn = instance.InstanceArn;
+        identityStoreId = instance.IdentityStoreId ?? "";
+        activeClient = tryClient;
+        break;
+      }
+    } catch (err: any) {
+      lastError = err?.message ?? String(err);
+      // Try next region
     }
-    instanceArn = instance.InstanceArn;
-    identityStoreId = instance.IdentityStoreId ?? "";
-  } catch (err: any) {
+  }
+
+  if (!instanceArn || !activeClient) {
     return {
-      error: `Cannot list SSO instances: ${err?.message ?? err}. Ensure the credentials have sso:ListInstances permission.`,
+      error: lastError
+        ? `Cannot access AWS IAM Identity Center: ${lastError}. Ensure the credentials have sso:ListInstances permission.`
+        : "No AWS IAM Identity Center instance found in any supported region. Ensure Identity Center is enabled and credentials have sso:ListInstances permission.",
     };
   }
+
+  const client = activeClient;
 
   // ── Step 2: Find the permission set ARN by name ───────────────────────────
   let permissionSetArn: string | null = null;

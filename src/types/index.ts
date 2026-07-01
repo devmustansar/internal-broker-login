@@ -192,10 +192,17 @@ export interface AwsResourceConfig {
   brokerCredentialRef?: string;
   /**
    * Which STS strategy to use.
-   * "assume_role" — preferred; broker IAM user assumes target IAM role.
-   * "federation_token" — fallback; uses broker credentials directly (less secure).
+   * "assume_role"       — preferred; broker IAM user assumes target IAM role.
+   * "federation_token"  — fallback; uses broker credentials directly (less secure).
+   * "aws_sso"           — Identity Center redirect; no broker credentials needed.
    */
-  stsStrategy: "assume_role" | "federation_token";
+  stsStrategy: "assume_role" | "federation_token" | "aws_sso";
+  /** SSO Identity Center start URL — used during setup */
+  ssoStartUrl?: string;
+  /** SSO permission set name — e.g. "AdministratorAccess" */
+  ssoPermissionSetName?: string;
+  /** AWS region of the SSO Identity Center instance — e.g. "us-west-2" */
+  ssoRegion?: string;
   /**
    * Optional fixed STS session name used in CloudTrail for all users of this resource.
    * When set, overrides the default behaviour of using the authenticated user's email.
@@ -239,14 +246,14 @@ export interface AwsTemporaryCredentials {
  * Final result of the AWS federation flow.
  */
 export interface AwsFederationResult {
-  /** The full AWS console sign-in URL with the SigninToken embedded */
+  /** The full AWS console sign-in URL with the SigninToken embedded, or an SSO portal URL */
   loginUrl: string;
-  /** ISO timestamp when the temporary credentials expire */
+  /** ISO timestamp when the temporary credentials expire (empty string for SSO redirects) */
   expiresAt: string;
   /** The AWS account ID for audit logging */
   awsAccountId: string;
-  /** The role ARN that was assumed */
-  roleArn: string;
+  /** The role ARN that was assumed — undefined for aws_sso strategy */
+  roleArn?: string;
 }
 
 /**

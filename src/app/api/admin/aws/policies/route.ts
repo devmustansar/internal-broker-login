@@ -170,6 +170,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!accessKeyId || !secretAccessKey) {
+      console.error("[/api/admin/aws/policies] missing credentials in request");
       return badRequest("Provide either accessKeyId + secretAccessKey, or a resourceKey with stored credentials.");
     }
 
@@ -178,6 +179,8 @@ export async function POST(req: NextRequest) {
       secretAccessKey: String(secretAccessKey).trim(),
       ...(sessionToken ? { sessionToken: String(sessionToken).trim() } : {}),
     };
+
+    console.log("[/api/admin/aws/policies] calling GetCallerIdentity, region:", region, "hasSessionToken:", !!sessionToken);
 
     // Step 1: Identify who these keys belong to
     const sts = new STSClient({ region, credentials });
@@ -190,6 +193,7 @@ export async function POST(req: NextRequest) {
       const identity = await sts.send(new GetCallerIdentityCommand({}));
       callerArn = identity.Arn ?? "";
       accountId = identity.Account ?? "";
+      console.log("[/api/admin/aws/policies] GetCallerIdentity ok:", callerArn);
       if (callerArn.includes(":user/")) {
         callerType = "user";
         principalName = callerArn.split(":user/").pop() ?? "";
@@ -203,14 +207,22 @@ export async function POST(req: NextRequest) {
         callerType = "unknown";
         principalName = "";
       }
-    } catch {
+    } catch (err: any) {
+      const awsMsg: string = err?.message ?? String(err);
+      console.error("[/api/admin/aws/policies] GetCallerIdentity failed:", awsMsg, "server UTC:", new Date().toISOString());
+      const isExpired = awsMsg.includes("expired") || awsMsg.includes("Expired");
       return NextResponse.json(
-        { error: "Invalid credentials or no sts:GetCallerIdentity permission." },
+        {
+          error: isExpired
+            ? `AWS credentials are expired. If you just generated them, your server clock may be out of sync with AWS (must be within 5 minutes). Server time: ${new Date().toISOString()}`
+            : `AWS credentials rejected: ${awsMsg}`,
+        },
         { status: 400 }
       );
     }
 
     const authType = detectAwsAuthType(callerArn);
+    console.log("[/api/admin/aws/policies] authType:", authType, "principalName:", principalName);
 
     // ── SSO branch ────────────────────────────────────────────────────────────
     // When credentials come from an SSO session, IAM ListAttachedUserPolicies
@@ -225,6 +237,7 @@ export async function POST(req: NextRequest) {
       );
 
       if ("error" in ssoResult) {
+        console.error("[/api/admin/aws/policies] SSO discovery failed:", ssoResult.error, { callerArn, principalName, accountId });
         return NextResponse.json({ error: ssoResult.error }, { status: 400 });
       }
 
