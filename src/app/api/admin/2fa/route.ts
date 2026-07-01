@@ -59,13 +59,13 @@ export async function GET(req: NextRequest) {
       ...(status ? { status } : {}),
       ...(search
         ? {
-            OR: [
-              { appName: { contains: search, mode: "insensitive" } },
-              { issuer: { contains: search, mode: "insensitive" } },
-              { accountLabel: { contains: search, mode: "insensitive" } },
-              { category: { contains: search, mode: "insensitive" } },
-            ],
-          }
+          OR: [
+            { appName: { contains: search, mode: "insensitive" } },
+            { issuer: { contains: search, mode: "insensitive" } },
+            { accountLabel: { contains: search, mode: "insensitive" } },
+            { category: { contains: search, mode: "insensitive" } },
+          ],
+        }
         : {}),
     };
 

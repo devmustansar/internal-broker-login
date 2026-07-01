@@ -34,19 +34,24 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
     const file = formData.get("image") as File | null;
+    console.log("file==============================")
 
     if (!file) return badRequest("image field is required");
     if (!ALLOWED_TYPES.includes(file.type)) {
       return badRequest("Image must be PNG, JPEG, WebP, or GIF");
     }
     if (file.size > MAX_SIZE) return badRequest("Image must be under 5 MB");
+    console.log("file==============================222222222")
 
     const buffer = Buffer.from(await file.arrayBuffer());
+    console.log("buffer==============================")
     const uri = await parseQrImageBuffer(buffer);
+    console.log("uri==============================", uri)
 
     let result;
     try {
       result = parseQrUri(uri);
+      console.log("result==============================", result)
     } catch (e: any) {
       return badRequest(e.message);
     }

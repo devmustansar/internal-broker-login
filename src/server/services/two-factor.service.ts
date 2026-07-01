@@ -303,13 +303,418 @@ export async function parseQrImageBuffer(imageBuffer: Buffer): Promise<string> {
   const sharp = (await import("sharp")).default;
   const jsQR = (await import("jsqr")).default;
 
-  const { data, info } = await sharp(imageBuffer)
+  type RawInfo = {
+    width: number;
+    height: number;
+    channels: number;
+  };
+
+  function forceRgba(data: Buffer, info: RawInfo): Buffer {
+    const { width, height, channels } = info;
+
+    if (channels === 4) {
+      return data;
+    }
+
+    const pixelCount = width * height;
+    const rgba = Buffer.alloc(pixelCount * 4);
+
+    for (let i = 0; i < pixelCount; i++) {
+      if (channels === 1) {
+        const gray = data[i];
+
+        rgba[i * 4] = gray;
+        rgba[i * 4 + 1] = gray;
+        rgba[i * 4 + 2] = gray;
+        rgba[i * 4 + 3] = 255;
+      } else if (channels === 2) {
+        const gray = data[i * 2];
+        const alpha = data[i * 2 + 1];
+
+        rgba[i * 4] = gray;
+        rgba[i * 4 + 1] = gray;
+        rgba[i * 4 + 2] = gray;
+        rgba[i * 4 + 3] = alpha;
+      } else if (channels === 3) {
+        rgba[i * 4] = data[i * 3];
+        rgba[i * 4 + 1] = data[i * 3 + 1];
+        rgba[i * 4 + 2] = data[i * 3 + 2];
+        rgba[i * 4 + 3] = 255;
+      }
+    }
+
+    return rgba;
+  }
+
+  function tryDecodeWithJsQr(data: Buffer, info: RawInfo): string | null {
+    const rgba = forceRgba(data, info);
+
+    if (rgba.length !== info.width * info.height * 4) {
+      return null;
+    }
+
+    const clamped = new Uint8ClampedArray(
+      rgba.buffer,
+      rgba.byteOffset,
+      rgba.byteLength
+    );
+
+    const result = jsQR(clamped, info.width, info.height, {
+      inversionAttempts: "attemptBoth",
+    });
+
+    return result?.data ?? null;
+  }
+
+  async function trySharpPipeline(
+    pipelineFactory: () => any
+  ): Promise<string | null> {
+    const { data, info } = await pipelineFactory()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const result = tryDecodeWithJsQr(data, info);
+
+    if (result) {
+      return result;
+    }
+
+    return null;
+  }
+
+  async function tryFallbackQrReader(
+    pipelineFactory: () => any
+  ): Promise<string | null> {
+    try {
+      const jimpModule: any = await import("jimp");
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore — no type declarations for qrcode-reader
+      const qrReaderModule: any = await import("qrcode-reader");
+
+      const Jimp = jimpModule.Jimp ?? jimpModule.default ?? jimpModule;
+      const QRCodeReader = qrReaderModule.default ?? qrReaderModule;
+
+      const pngBuffer = await pipelineFactory().png().toBuffer();
+      const image = await Jimp.read(pngBuffer);
+
+      const result = await new Promise<string | null>((resolve) => {
+        const qr = new QRCodeReader();
+
+        qr.callback = (err: Error | null, value: any) => {
+          if (err || !value?.result) {
+            resolve(null);
+            return;
+          }
+
+          resolve(value.result);
+        };
+
+        qr.decode(image.bitmap);
+      });
+
+      return result ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  const base = () => sharp(imageBuffer, { failOn: "none" }).rotate();
+
+  /**
+   * Attempt group 1:
+   * Normal QR images.
+   */
+  const simpleAttempts: Array<{
+    label: string;
+    pipelineFactory: () => any;
+  }> = [
+      {
+        label: "simple-normal",
+        pipelineFactory: () =>
+          base()
+            .flatten({ background: "#ffffff" })
+            .normalize()
+            .sharpen()
+            .ensureAlpha(),
+      },
+      {
+        label: "simple-resized-1600",
+        pipelineFactory: () =>
+          base()
+            .resize({
+              width: 1600,
+              withoutEnlargement: false,
+            })
+            .flatten({ background: "#ffffff" })
+            .normalize()
+            .sharpen()
+            .ensureAlpha(),
+      },
+      {
+        label: "simple-threshold-140",
+        pipelineFactory: () =>
+          base()
+            .resize({
+              width: 1600,
+              withoutEnlargement: false,
+              kernel: sharp.kernel.nearest,
+            })
+            .flatten({ background: "#ffffff" })
+            .threshold(140)
+            .ensureAlpha(),
+      },
+      {
+        label: "simple-threshold-180",
+        pipelineFactory: () =>
+          base()
+            .resize({
+              width: 1600,
+              withoutEnlargement: false,
+              kernel: sharp.kernel.nearest,
+            })
+            .flatten({ background: "#ffffff" })
+            .threshold(180)
+            .ensureAlpha(),
+      },
+      {
+        label: "simple-inverted",
+        pipelineFactory: () =>
+          base()
+            .resize({
+              width: 1600,
+              withoutEnlargement: false,
+            })
+            .flatten({ background: "#ffffff" })
+            .negate()
+            .normalize()
+            .ensureAlpha(),
+      },
+    ];
+
+  for (const attempt of simpleAttempts) {
+    const result = await trySharpPipeline(attempt.pipelineFactory);
+    if (result) return result;
+  }
+
+  /**
+   * Attempt group 2:
+   * Detect QR canvas/crop area.
+   * This is needed for QR images with dark outer background.
+   */
+  const { data: rawData, info: rawInfo } = await base()
+    .flatten({ background: "#ffffff" })
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
 
-  const code = jsQR(new Uint8ClampedArray(data), info.width, info.height);
-  if (!code) throw new Error("No QR code found in image");
+  const { width, height, channels } = rawInfo;
 
-  return code.data;
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+
+  /**
+   * Find the visible white QR canvas.
+   * Your sample QR has a black outer background and a white QR square.
+   */
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * channels;
+
+      const r = rawData[idx];
+      const g = rawData[idx + 1];
+      const b = rawData[idx + 2];
+
+      if (r > 180 && g > 180 && b > 180) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (minX >= maxX || minY >= maxY) {
+    throw new Error("No QR code found in image");
+  }
+
+  const cropWidth = maxX - minX + 1;
+  const cropHeight = maxY - minY + 1;
+
+  console.log("[parseQrImageBuffer] crop box", {
+    minX,
+    minY,
+    maxX,
+    maxY,
+    cropWidth,
+    cropHeight,
+  });
+
+  const border = 80;
+
+  const cropBase = () =>
+    sharp(imageBuffer, { failOn: "none" })
+      .rotate()
+      .extract({
+        left: minX,
+        top: minY,
+        width: cropWidth,
+        height: cropHeight,
+      });
+
+  /**
+   * Important:
+   * Do not force 846 -> 1600 for dense QR codes first.
+   * Non-integer scaling can break dense Google Authenticator migration QR images.
+   */
+  const cropAttempts: Array<{
+    label: string;
+    pipelineFactory: () => any;
+  }> = [
+      {
+        label: "crop-border-original",
+        pipelineFactory: () =>
+          cropBase()
+            .extend({
+              top: border,
+              bottom: border,
+              left: border,
+              right: border,
+              background: "#ffffff",
+            })
+            .flatten({ background: "#ffffff" })
+            .ensureAlpha(),
+      },
+      {
+        label: "crop-border-threshold-120-original",
+        pipelineFactory: () =>
+          cropBase()
+            .extend({
+              top: border,
+              bottom: border,
+              left: border,
+              right: border,
+              background: "#ffffff",
+            })
+            .flatten({ background: "#ffffff" })
+            .threshold(120)
+            .ensureAlpha(),
+      },
+      {
+        label: "crop-border-threshold-140-original",
+        pipelineFactory: () =>
+          cropBase()
+            .extend({
+              top: border,
+              bottom: border,
+              left: border,
+              right: border,
+              background: "#ffffff",
+            })
+            .flatten({ background: "#ffffff" })
+            .threshold(140)
+            .ensureAlpha(),
+      },
+      {
+        label: "crop-border-threshold-180-original",
+        pipelineFactory: () =>
+          cropBase()
+            .extend({
+              top: border,
+              bottom: border,
+              left: border,
+              right: border,
+              background: "#ffffff",
+            })
+            .flatten({ background: "#ffffff" })
+            .threshold(180)
+            .ensureAlpha(),
+      },
+      {
+        label: "crop-border-2x-nearest",
+        pipelineFactory: () =>
+          cropBase()
+            .extend({
+              top: border,
+              bottom: border,
+              left: border,
+              right: border,
+              background: "#ffffff",
+            })
+            .resize({
+              width: (cropWidth + border * 2) * 2,
+              height: (cropHeight + border * 2) * 2,
+              fit: "fill",
+              kernel: sharp.kernel.nearest,
+            })
+            .flatten({ background: "#ffffff" })
+            .ensureAlpha(),
+      },
+      {
+        label: "crop-border-3x-nearest",
+        pipelineFactory: () =>
+          cropBase()
+            .extend({
+              top: border,
+              bottom: border,
+              left: border,
+              right: border,
+              background: "#ffffff",
+            })
+            .resize({
+              width: (cropWidth + border * 2) * 3,
+              height: (cropHeight + border * 2) * 3,
+              fit: "fill",
+              kernel: sharp.kernel.nearest,
+            })
+            .flatten({ background: "#ffffff" })
+            .ensureAlpha(),
+      },
+      {
+        label: "crop-border-2x-threshold-140",
+        pipelineFactory: () =>
+          cropBase()
+            .extend({
+              top: border,
+              bottom: border,
+              left: border,
+              right: border,
+              background: "#ffffff",
+            })
+            .resize({
+              width: (cropWidth + border * 2) * 2,
+              height: (cropHeight + border * 2) * 2,
+              fit: "fill",
+              kernel: sharp.kernel.nearest,
+            })
+            .flatten({ background: "#ffffff" })
+            .threshold(140)
+            .ensureAlpha(),
+      },
+    ];
+
+  for (const attempt of cropAttempts) {
+    const result = await trySharpPipeline(attempt.pipelineFactory);
+    if (result) return result;
+  }
+
+  /**
+   * Attempt group 3:
+   * Fallback decoder.
+   *
+   * Install:
+   * npm install jimp qrcode-reader
+   */
+  for (const attempt of cropAttempts) {
+    const result = await tryFallbackQrReader(attempt.pipelineFactory);
+    if (result) return result;
+  }
+
+  for (const attempt of simpleAttempts) {
+    const result = await tryFallbackQrReader(attempt.pipelineFactory);
+    if (result) return result;
+  }
+
+  throw new Error("No QR code found in image");
 }
