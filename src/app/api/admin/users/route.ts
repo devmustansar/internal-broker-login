@@ -57,13 +57,7 @@ export async function GET(req: NextRequest) {
 
     // Filter by org scope for non-super-admins
     if (!isSuperAdmin(auth)) {
-      // Org owners can see all users so they can add new members from outside their org
-      const isAnyOrgOwner = Object.values(auth.orgRoles || {}).some((r) => r === "owner");
-      if (isAnyOrgOwner) {
-        return NextResponse.json(users);
-      }
-
-      // Build set of org IDs where the caller has admin access
+      // Build set of org IDs where the caller has owner or admin access
       const adminOrgIds = new Set<string>();
       for (const [orgId, role] of Object.entries(auth.orgRoles || {})) {
         if (role === "admin" || role === "owner") adminOrgIds.add(orgId);

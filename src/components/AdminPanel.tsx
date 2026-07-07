@@ -1506,7 +1506,6 @@ function CreateUserForm({ onSuccess, onError }: AdminActionProps) {
   const [formData, setFormData] = useState({
     email: "",
     name: "",
-    password: "",
     role: "user",
     organizationIds: [] as string[],
   });
@@ -1530,7 +1529,6 @@ function CreateUserForm({ onSuccess, onError }: AdminActionProps) {
       setFormData({
         email: "",
         name: "",
-        password: "",
         role: "user",
         organizationIds: [],
       });
@@ -1571,25 +1569,6 @@ function CreateUserForm({ onSuccess, onError }: AdminActionProps) {
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             required
-          />
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Typography variant="caption" sx={{ mb: 1, display: 'block', fontWeight: 800, color: 'text.secondary', letterSpacing: '0.1em' }}>TEMPORARY PASSKEY</Typography>
-          <TextField
-            fullWidth
-            type="password"
-            variant="outlined"
-            placeholder="••••••••"
-            value={formData.password}
-            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-            required
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Lock size={18} color={theme.palette.text.secondary} />
-                </InputAdornment>
-              ),
-            }}
           />
         </Grid>
         <Grid size={{ xs: 12, md: 6 }}>
