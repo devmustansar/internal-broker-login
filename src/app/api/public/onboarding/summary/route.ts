@@ -102,10 +102,12 @@ export async function GET(req: NextRequest) {
     else pendingMembers++;
   }
 
+  const totalTeamMembersTarget = parseInt(process.env.TOTAL_EMPLOYEES_COUNT ?? "0", 10) || totalMembers;
+
   const overallProgressPercent =
-    totalMembers === 0
+    totalTeamMembersTarget === 0
       ? 0
-      : Math.round((fullyOnboardedMembers / totalMembers) * 100);
+      : Math.round((fullyOnboardedMembers / totalTeamMembersTarget) * 100);
 
   const lastUpdatedAt =
     allOrgs.reduce<Date>(
@@ -117,6 +119,7 @@ export async function GET(req: NextRequest) {
     totalOrganizations,
     totalTeams,
     totalMembers,
+    totalTeamMembersTarget,
     totalResources,
     totalCredentials,
     totalTotpEntries,
