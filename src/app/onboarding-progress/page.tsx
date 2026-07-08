@@ -934,7 +934,7 @@ function OrgDetailPanel({ org, detail, members, resources, credentials, totp, ma
             </FormControl>
           </Stack>
           <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
-            <Table size="small" sx={{ minWidth: 720 }}>
+            <Table size="small" sx={{ minWidth: 720, "& .MuiTableCell-root": { py: 1.5 } }}>
               <TableHead>
                 <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover", whiteSpace: "nowrap" } }}>
                   <TableCell sx={{ minWidth: 150 }}>MEMBER</TableCell>
@@ -1016,7 +1016,7 @@ function OrgDetailPanel({ org, detail, members, resources, credentials, totp, ma
         <Alert severity="info">No resources configured.</Alert>
       ) : (
         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
-          <Table size="small" sx={{ minWidth: 520 }}>
+          <Table size="small" sx={{ minWidth: 520, "& .MuiTableCell-root": { py: 1.5 } }}>
             <TableHead>
               <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover", whiteSpace: "nowrap" } }}>
                 <TableCell sx={{ minWidth: 180 }}>CATEGORY</TableCell>
@@ -1070,7 +1070,7 @@ function OrgDetailPanel({ org, detail, members, resources, credentials, totp, ma
         <Alert severity="info">No credentials configured.</Alert>
       ) : (
         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
-          <Table size="small" sx={{ minWidth: 640 }}>
+          <Table size="small" sx={{ minWidth: 640, "& .MuiTableCell-root": { py: 1.5 } }}>
             <TableHead>
               <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover", whiteSpace: "nowrap" } }}>
                 <TableCell sx={{ minWidth: 160 }}>CATEGORY</TableCell><TableCell align="center">TOTAL</TableCell><TableCell align="center">ASSIGNED</TableCell><TableCell align="center">UNASSIGNED</TableCell><TableCell align="center">MEMBERS WITH</TableCell><TableCell align="center">MEMBERS MISSING</TableCell><TableCell align="center">STATUS</TableCell>
@@ -1098,7 +1098,7 @@ function OrgDetailPanel({ org, detail, members, resources, credentials, totp, ma
         <Alert severity="info">No 2FA entries configured.</Alert>
       ) : (
         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
-          <Table size="small" sx={{ minWidth: 680 }}>
+          <Table size="small" sx={{ minWidth: 680, "& .MuiTableCell-root": { py: 1.5 } }}>
             <TableHead>
               <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover", whiteSpace: "nowrap" } }}>
                 <TableCell sx={{ minWidth: 160 }}>CATEGORY</TableCell><TableCell align="center">TOTAL</TableCell><TableCell align="center">ACTIVE</TableCell><TableCell align="center">ASSIGNED</TableCell><TableCell align="center">UNASSIGNED</TableCell><TableCell align="center">MEMBERS WITH</TableCell><TableCell align="center">MEMBERS MISSING</TableCell><TableCell align="center">STATUS</TableCell>
@@ -1125,7 +1125,7 @@ function OrgDetailPanel({ org, detail, members, resources, credentials, totp, ma
       {/* Assignment Matrix */}
       {tab === 4 && (
         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
-          <Table size="small" sx={{ minWidth: 820 }}>
+          <Table size="small" sx={{ minWidth: 820, "& .MuiTableCell-root": { py: 1.5 } }}>
             <TableHead>
               <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover", whiteSpace: "nowrap" } }}>
                 <TableCell sx={{ minWidth: 150 }}>MEMBER</TableCell><TableCell align="center" sx={{ minWidth: 100 }}>RESOURCES</TableCell><TableCell align="center">RES. STATUS</TableCell><TableCell align="center" sx={{ minWidth: 110 }}>CREDENTIALS</TableCell><TableCell align="center">CRED. STATUS</TableCell><TableCell align="center" sx={{ minWidth: 80 }}>2FA</TableCell><TableCell align="center">2FA STATUS</TableCell><TableCell align="center">OVERALL</TableCell><TableCell sx={{ minWidth: 160 }}>MISSING</TableCell>
@@ -1163,7 +1163,7 @@ function OrgDetailPanel({ org, detail, members, resources, credentials, totp, ma
         <Alert severity="success">No open blockers for this organization.</Alert>
       ) : (
         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2, overflowX: "auto" }}>
-          <Table size="small" sx={{ minWidth: 520 }}>
+          <Table size="small" sx={{ minWidth: 520, "& .MuiTableCell-root": { py: 1.5 } }}>
             <TableHead>
               <TableRow sx={{ "& th": { fontWeight: 700, fontSize: "0.7rem", color: "text.secondary", bgcolor: "action.hover", whiteSpace: "nowrap" } }}>
                 <TableCell sx={{ minWidth: 150 }}>MEMBER</TableCell><TableCell sx={{ minWidth: 160 }}>BLOCKER TYPE</TableCell><TableCell>DESCRIPTION</TableCell><TableCell align="center">PRIORITY</TableCell>
