@@ -20,6 +20,12 @@ export async function GET(req: NextRequest) {
     if (!auth) return unauthorized();
     if (!isAdminOrAbove(auth)) return forbidden();
 
+    // scope=all lets org owners/admins search every user in the system
+    // (e.g. to add a brand-new member to their org), bypassing the
+    // org-membership filter below that's used for the org-scoped
+    // members/resource-assignment views.
+    const scope = req.nextUrl.searchParams.get("scope");
+
     const users = await prisma.user.findMany({
       select: {
         id: true,
@@ -55,8 +61,9 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
-    // Filter by org scope for non-super-admins
-    if (!isSuperAdmin(auth)) {
+    // Filter by org scope for non-super-admins, unless the caller explicitly
+    // asked for the unfiltered system-wide list (scope=all)
+    if (!isSuperAdmin(auth) && scope !== "all") {
       // Build set of org IDs where the caller has owner or admin access
       const adminOrgIds = new Set<string>();
       for (const [orgId, role] of Object.entries(auth.orgRoles || {})) {

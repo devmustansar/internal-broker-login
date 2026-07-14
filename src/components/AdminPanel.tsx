@@ -1676,11 +1676,13 @@ function OrganizationsPanel({ onSuccess, onError }: AdminActionProps) {
 
   useEffect(() => { fetchOrgs(); }, []);
 
-  // Lazy-load all users once (for add-member dropdowns)
+  // Lazy-load all users once (for add-member dropdowns) — scope=all so
+  // owners/admins can search every user in the system, not just users
+  // already in an org they manage.
   const ensureUsersLoaded = async () => {
     if (usersLoaded) return;
     try {
-      const res = await fetch("/api/admin/users");
+      const res = await fetch("/api/admin/users?scope=all");
       if (res.ok) { setAllUsers(await res.json()); setUsersLoaded(true); }
     } catch (err) { console.error(err); }
   };
