@@ -1,23 +1,98 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { useApp } from "@/lib/app-context";
 import { APP_NAME } from "@/lib/constants";
-import { 
-  AppBar, 
-  Toolbar, 
-  Box, 
-  Typography, 
-  Button, 
-  Avatar, 
-  Chip, 
-  Divider, 
-  Stack, 
-  alpha, 
+import {
+  AppBar,
+  Toolbar,
+  Box,
+  Typography,
+  Button,
+  Avatar,
+  Chip,
+  Divider,
+  Stack,
+  alpha,
   useTheme,
-  Container
+  Container,
+  IconButton,
+  Badge,
+  Popover,
+  List,
+  ListItem,
+  ListItemText,
 } from "@mui/material";
-import { LogOut } from "lucide-react";
+import { LogOut, Bell } from "lucide-react";
 import { motion } from "framer-motion";
+
+function NotificationBell() {
+  const theme = useTheme();
+  const [items, setItems] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/notifications");
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        setItems(data.items || []);
+        setUnreadCount(data.unreadCount || 0);
+      } catch { /* best-effort */ }
+    };
+    load();
+    pollRef.current = setInterval(load, 60000);
+    return () => { cancelled = true; if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  const handleOpen = (e: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(e.currentTarget);
+    if (unreadCount > 0) {
+      fetch("/api/notifications", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ all: true }) })
+        .then(() => setUnreadCount(0))
+        .catch(() => {});
+    }
+  };
+
+  return (
+    <>
+      <IconButton onClick={handleOpen} sx={{ color: 'text.secondary' }}>
+        <Badge badgeContent={unreadCount} color="error">
+          <Bell size={20} />
+        </Badge>
+      </IconButton>
+      <Popover
+        open={!!anchorEl}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        PaperProps={{ sx: { width: 360, maxHeight: 420, borderRadius: 3, mt: 1 } }}
+      >
+        {items.length === 0 ? (
+          <Box sx={{ p: 3, textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary">No notifications yet.</Typography>
+          </Box>
+        ) : (
+          <List dense sx={{ py: 0 }}>
+            {items.map((n) => (
+              <ListItem key={n.id} sx={{ borderBottom: `1px solid ${theme.palette.divider}`, opacity: n.readAt ? 0.6 : 1 }}>
+                <ListItemText
+                  primary={<Typography variant="body2" sx={{ fontWeight: 700 }}>{n.title}</Typography>}
+                  secondary={n.body || new Date(n.createdAt).toLocaleString()}
+                />
+              </ListItem>
+            ))}
+          </List>
+        )}
+      </Popover>
+    </>
+  );
+}
 
 export default function TopBar() {
   const { user, logout } = useApp();
@@ -79,11 +154,13 @@ export default function TopBar() {
                 </Stack>
               </Stack>
               
+              <NotificationBell />
+
               <Divider orientation="vertical" flexItem sx={{ height: 16, my: 'auto', display: { xs: 'none', sm: 'block' } }} />
-              
-              <Button 
-                variant="text" 
-                size="small" 
+
+              <Button
+                variant="text"
+                size="small"
                 onClick={logout}
                 sx={{ 
                   color: 'text.secondary', 

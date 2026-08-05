@@ -8,40 +8,54 @@ datasource db {
 }
 
 model User {
-  id                  String   @id @default(uuid())
-  email               String   @unique
-  name                String
-  role                String   // "super_admin" | "admin" | "user" | "readonly"
-  passwordHash        String?  // nullable for mock login/SSO
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  
-  auditLogs           AuditLog[]
-  sessions            BrokerSession[]
-  organizations       UserOrganization[]
-  awsPolicies         UserAwsPolicy[]
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  role         String // "super_admin" | "admin" | "user" | "readonly"
+  passwordHash String? // nullable for mock login/SSO
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  auditLogs                  AuditLog[]
+  sessions                   BrokerSession[]
+  organizations              UserOrganization[]
+  awsPolicies                UserAwsPolicy[]
   credentialGroupMemberships CredentialGroupMember[]
   credentialShares           CredentialShare[]
   resourceAccess             UserResourceAccess[]
-  twoFactorEntriesCreated    TwoFactorEntry[]          @relation("TwoFactorCreatedBy")
-  twoFactorEntriesOwned      TwoFactorEntry[]          @relation("TwoFactorOwner")
-  twoFactorAssignmentsTo     TwoFactorAssignment[]     @relation("TwoFactorAssignedToUser")
-  twoFactorAssignmentsBy     TwoFactorAssignment[]     @relation("TwoFactorAssignedBy")
+  twoFactorEntriesCreated    TwoFactorEntry[]         @relation("TwoFactorCreatedBy")
+  twoFactorEntriesOwned      TwoFactorEntry[]         @relation("TwoFactorOwner")
+  twoFactorAssignmentsTo     TwoFactorAssignment[]    @relation("TwoFactorAssignedToUser")
+  twoFactorAssignmentsBy     TwoFactorAssignment[]    @relation("TwoFactorAssignedBy")
   twoFactorAccessLogs        TwoFactorAccessLog[]
   twoFactorSecretVersions    TwoFactorSecretVersion[]
+
+  ownedResources    Resource[]         @relation("ResourceOwner")
+  ownedAwsResources AwsResource[]      @relation("AwsResourceOwner")
+  ownedCredentials  SharedCredential[] @relation("CredentialOwner")
+
+  personalCredentials             PersonalCredential[]
+  personalTwoFactorEntries        PersonalTwoFactorEntry[]
+  personalTwoFactorSecretVersions PersonalTwoFactorSecretVersion[]
+  personalVaultAccessLogs         PersonalVaultAccessLog[]
+
+  vaultRequestsMade     VaultRequest[] @relation("VaultRequestRequester")
+  vaultRequestsReviewed VaultRequest[] @relation("VaultRequestReviewer")
+
+  notifications Notification[]
 }
 
 model Resource {
-  id             String   @id @default(uuid())
-  resourceKey    String   @unique
-  name           String
-  appHost        String
-  apiHost        String
-  loginUrl       String
-  loginMethod    String   @default("POST")
-  loginAdapter   String   // "form_login_basic" | "form_login_csrf" | "json_login" | "magic_link"
-  tokenExtractionPath    String? // JSON path to the one-time token in the login response, e.g. "info.token"
-  tokenValidationPath    String? // client app path that validates the one-time token, e.g. "/auth/validate"
+  id                      String   @id @default(uuid())
+  resourceKey             String   @unique
+  name                    String
+  appHost                 String
+  apiHost                 String
+  loginUrl                String
+  loginMethod             String   @default("POST")
+  loginAdapter            String // "form_login_basic" | "form_login_csrf" | "json_login" | "magic_link"
+  tokenExtractionPath     String? // JSON path to the one-time token in the login response, e.g. "info.token"
+  tokenValidationPath     String? // client app path that validates the one-time token, e.g. "/auth/validate"
   /// For magic_link adapter: JSON path to the redirect URL in the login response, e.g. "data.url" or "link".
   /// When set, the broker extracts this URL from the login response and redirects the user directly to it,
   /// bypassing the normal one-time-token + tokenValidationPath flow entirely.
@@ -51,74 +65,79 @@ model Resource {
   /// Any extra static fields in the template are preserved as-is.
   /// Example: {"user_params":{"email":"{{email}}","password":"{{password}}","external_login_url":true}}
   /// When blank, the broker sends a flat {[usernameField]: email, [passwordField]: password} body.
-  loginPayloadTemplate   String?
-  usernameField  String?  // e.g. "email" or "user_id"
-  passwordField  String?  // e.g. "password" or "passAuth"
-  environment    String   @default("production")
-  isActive       Boolean  @default(true)
-  description    String?
-  iconUrl        String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  loginPayloadTemplate    String?
+  usernameField           String? // e.g. "email" or "user_id"
+  passwordField           String? // e.g. "password" or "passAuth"
+  environment             String   @default("production")
+  isActive                Boolean  @default(true)
+  description             String?
+  iconUrl                 String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   organization   Organization? @relation(fields: [organizationId], references: [id])
   organizationId String?
+
+  /// Resource Owner — grants org-credential/2FA edit + request-approval rights scoped to this resource
+  owner       User?   @relation("ResourceOwner", fields: [ownerUserId], references: [id])
+  ownerUserId String?
 
   accounts         ManagedAccount[]
   sessions         BrokerSession[]
   auditLogs        AuditLog[]
   userAccess       UserResourceAccess[]
   twoFactorEntries TwoFactorEntry[]     @relation("ResourceTwoFactor")
+  vaultRequests    VaultRequest[]       @relation("VaultRequestResource")
 }
 
 model ManagedAccount {
-  id          String   @id @default(uuid())
-  resource    Resource @relation(fields: [resourceId], references: [id])
-  resourceId  String
-  accountKey  String
-  vaultPath   String
-  label       String
-  role        String
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(uuid())
+  resource   Resource @relation(fields: [resourceId], references: [id])
+  resourceId String
+  accountKey String
+  vaultPath  String
+  label      String
+  role       String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  sessions    BrokerSession[]
+  sessions BrokerSession[]
 }
 
 model BrokerSession {
-  brokerSessionId  String   @id @default(uuid())
-  user             User     @relation(fields: [userId], references: [id])
+  brokerSessionId  String         @id @default(uuid())
+  user             User           @relation(fields: [userId], references: [id])
   userId           String
-  resource         Resource @relation(fields: [resourceId], references: [id])
+  resource         Resource       @relation(fields: [resourceId], references: [id])
   resourceId       String
   managedAccount   ManagedAccount @relation(fields: [managedAccountId], references: [id])
   managedAccountId String
-  upstreamCookies  Json     // Map<string, string>
-  status           String   @default("active")
+  upstreamCookies  Json // Map<string, string>
+  status           String         @default("active")
   expiresAt        DateTime
-  createdAt        DateTime @default(now())
+  createdAt        DateTime       @default(now())
 
-  auditLogs        AuditLog[]
+  auditLogs AuditLog[]
 }
 
 model AuditLog {
-  id               String   @id @default(uuid())
-  action           String
-  user             User?    @relation(fields: [userId], references: [id])
-  userId           String?
+  id              String         @id @default(uuid())
+  action          String
+  user            User?          @relation(fields: [userId], references: [id])
+  userId          String?
   /// Denormalized for fast filtering — mirrors Resource.resourceKey at log time
-  resourceKey      String?
-  resource         Resource? @relation(fields: [resourceId], references: [id])
-  resourceId       String?
-  brokerSession    BrokerSession? @relation(fields: [brokerSessionId], references: [brokerSessionId])
-  brokerSessionId  String?
+  resourceKey     String?
+  resource        Resource?      @relation(fields: [resourceId], references: [id])
+  resourceId      String?
+  brokerSession   BrokerSession? @relation(fields: [brokerSessionId], references: [brokerSessionId])
+  brokerSessionId String?
   /// Denormalized org scope at log time — enables org-scoped admin queries
-  organizationId   String?
-  timestamp        DateTime @default(now())
-  details          Json?
-  ipAddress        String?
-  outcome          String   // "success" | "failure" | "info"
+  organizationId  String?
+  timestamp       DateTime       @default(now())
+  details         Json?
+  ipAddress       String?
+  outcome         String // "success" | "failure" | "info"
 
   @@index([userId])
   @@index([organizationId])
@@ -140,14 +159,14 @@ model AuditLog {
 //   • version increments on every updateSecret() call
 
 model StoredSecret {
-  id               String    @id @default(uuid())
+  id String @id @default(uuid())
 
   /// Logical reference key used in resource config, e.g. "aws/broker/default"
   /// Unique among non-deleted rows (enforced in application layer via unique index)
-  secretRef        String    @unique
+  secretRef String @unique
 
   /// SecretKind discriminant: aws_iam_credentials | web_basic_credentials | jira_api_token | generic_key_value
-  kind             String
+  kind String
 
   /// AES-256-GCM ciphertext — format: "<iv_hex>:<authTag_hex>:<ciphertext_hex>"
   /// Never logged, never returned to the frontend
@@ -155,19 +174,19 @@ model StoredSecret {
 
   /// Audit-safe metadata (label, resourceKey, tags, notes, rotatedAt)
   /// Stored as JSONB — never contains plaintext credentials
-  metadata         Json      @default("{}")
+  metadata Json @default("{}")
 
   /// Which provider type created this row ("database" | "vault")
-  provider         String    @default("database")
+  provider String @default("database")
 
   /// Optimistic concurrency counter — incremented on each updateSecret()
-  version          Int       @default(1)
+  version Int @default(1)
 
   /// Soft-delete timestamp — null means the secret is live
-  deletedAt        DateTime?
+  deletedAt DateTime?
 
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([secretRef])
   @@index([kind])
@@ -178,71 +197,76 @@ model StoredSecret {
 /// Maps each secretRef → which backend (database | vault) owns it.
 /// Only needed in hybrid mode; safe to ignore in single-provider deployments.
 model StoredSecretRef {
-  id        String    @id @default(uuid())
-  secretRef String    @unique
+  id        String @id @default(uuid())
+  secretRef String @unique
 
   /// "database" or "vault"
-  provider  String
+  provider String
 
   /// Mirrors soft-delete state of the corresponding StoredSecret
   deletedAt DateTime?
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ─── AWS Federation ───────────────────────────────────────────────────────────
 
 model AwsResource {
-  id                   String   @id @default(uuid())
+  id                     String   @id @default(uuid())
   /// Unique key used in portal ACL checks, e.g. "aws-prod-readonly"
-  resourceKey          String   @unique
-  name                 String
-  description          String?
+  resourceKey            String   @unique
+  name                   String
+  description            String?
   /// AWS account ID for display purposes, e.g. "123456789012"
-  awsAccountId         String
+  awsAccountId           String
   /// IAM Role ARN the broker will assume, e.g. "arn:aws:iam::123456789012:role/BrokerConsoleRole"
-  roleArn              String
+  roleArn                String
   /// AWS region, e.g. "us-east-1"
-  region               String   @default("us-east-1")
+  region                 String   @default("us-east-1")
   /// AWS Console destination URL after sign-in, e.g. "https://console.aws.amazon.com/"
-  destination          String   @default("https://console.aws.amazon.com/")
+  destination            String   @default("https://console.aws.amazon.com/")
   /// Issuer label in CloudTrail, e.g. "internal-broker"
-  issuer               String   @default("internal-broker")
+  issuer                 String   @default("internal-broker")
   /// Custom STS session name used in CloudTrail instead of the user's email.
   /// If empty, the authenticated user's email is used (sanitized to STS format).
   /// Max 64 chars, allowed: [a-zA-Z0-9+=,.@_-]
-  sessionName          String?
+  sessionName            String?
   /// STS session duration in seconds. Min 900, max 43200.
-  sessionDurationSeconds Int    @default(3600)
+  sessionDurationSeconds Int      @default(3600)
   /// Optional external ID for cross-account trust policy
-  externalId           String?
+  externalId             String?
   /// Key used to look up broker IAM credentials from SecretsProvider, e.g. "aws/broker/default"
-  brokerCredentialRef  String
+  brokerCredentialRef    String
   /// "assume_role" (preferred), "federation_token" (fallback), or "aws_sso" (Identity Center redirect)
-  stsStrategy          String   @default("assume_role")
+  stsStrategy            String   @default("assume_role")
   /// SSO Identity Center start URL — required when stsStrategy is "aws_sso"
   /// e.g. "https://d-xxxxxxxxxx.awsapps.com/start"
-  ssoStartUrl          String?
+  ssoStartUrl            String?
   /// SSO permission set name — e.g. "AdministratorAccess"
-  ssoPermissionSetName String?
+  ssoPermissionSetName   String?
   /// AWS region where the SSO Identity Center instance lives — e.g. "us-west-2"
-  ssoRegion            String?
+  ssoRegion              String?
   /// IAM managed policy ARNs available for selection when assigning this resource to users
-  availablePolicyArns  String[]
+  availablePolicyArns    String[]
   /// Whether this resource appears in the portal
-  isActive             Boolean  @default(true)
+  isActive               Boolean  @default(true)
   /// Environment tag for display
-  environment          String   @default("production")
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  environment            String   @default("production")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  organization         Organization? @relation(fields: [organizationId], references: [id])
-  organizationId       String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String?
 
-  userPolicies         UserAwsPolicy[]
-  userAccess           UserResourceAccess[]
-  twoFactorEntries     TwoFactorEntry[]     @relation("AwsResourceTwoFactor")
+  /// Resource Owner — grants org-credential/2FA edit + request-approval rights scoped to this resource
+  owner       User?   @relation("AwsResourceOwner", fields: [ownerUserId], references: [id])
+  ownerUserId String?
+
+  userPolicies     UserAwsPolicy[]
+  userAccess       UserResourceAccess[]
+  twoFactorEntries TwoFactorEntry[]     @relation("AwsResourceTwoFactor")
+  vaultRequests    VaultRequest[]       @relation("VaultRequestAwsResource")
 }
 
 /// Join table: associates a User with a Resource (web) or AwsResource by ID.
@@ -267,17 +291,17 @@ model UserResourceAccess {
 /// passed to STS AssumeRole/GetFederationToken as session policies,
 /// scoping down the assumed role's permissions for that specific user.
 model UserAwsPolicy {
-  id           String      @id @default(uuid())
-  user         User        @relation(fields: [userId], references: [id])
-  userId       String
-  awsResource  AwsResource @relation(fields: [awsResourceId], references: [id])
+  id            String      @id @default(uuid())
+  user          User        @relation(fields: [userId], references: [id])
+  userId        String
+  awsResource   AwsResource @relation(fields: [awsResourceId], references: [id])
   awsResourceId String
   /// IAM managed policy ARNs to attach as session policies
-  policyArns   String[]
+  policyArns    String[]
   /// Custom session name for CloudTrail identity (optional, max 64 chars)
-  sessionName  String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  sessionName   String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   @@unique([userId, awsResourceId])
 }
@@ -285,21 +309,22 @@ model UserAwsPolicy {
 // ─── Multi-Tenancy ───────────────────────────────────────────────────────────
 
 model Organization {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  description String?
+  id                     String   @id @default(uuid())
+  name                   String   @unique
+  description            String?
   /// When true, org admins/owners can see all resources assigned to any member of this org
-  allowAdminResourceView Boolean @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  allowAdminResourceView Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  users             UserOrganization[]
-  resources         Resource[]
-  awsResources      AwsResource[]
-  sharedCredentials SharedCredential[]
-  credentialGroups  CredentialGroup[]
-  twoFactorEntries  TwoFactorEntry[]
+  users                UserOrganization[]
+  resources            Resource[]
+  awsResources         AwsResource[]
+  sharedCredentials    SharedCredential[]
+  credentialGroups     CredentialGroup[]
+  twoFactorEntries     TwoFactorEntry[]
   twoFactorAssignments TwoFactorAssignment[]
+  vaultRequests        VaultRequest[]
 }
 
 model UserOrganization {
@@ -328,7 +353,7 @@ model UserOrganization {
 // CredentialShare   — direct 1:1 share of a single credential with a user
 
 model SharedCredential {
-  id               String   @id @default(uuid())
+  id               String       @id @default(uuid())
   appName          String
   loginUrl         String?
   description      String?
@@ -338,29 +363,33 @@ model SharedCredential {
   organizationId   String
   /// userId of the admin who created this credential
   createdBy        String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  /// Resource Owner of this credential — may edit it even without org admin rights. Backfilled from createdBy.
+  owner            User?        @relation("CredentialOwner", fields: [ownerUserId], references: [id])
+  ownerUserId      String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   groups           CredentialGroupEntry[]
   shares           CredentialShare[]
-  twoFactorEntries TwoFactorEntry[]      @relation("CredentialTwoFactor")
+  twoFactorEntries TwoFactorEntry[]       @relation("CredentialTwoFactor")
+  vaultRequests    VaultRequest[]         @relation("VaultRequestCredential")
 
   @@index([organizationId])
 }
 
 model CredentialGroup {
-  id             String   @id @default(uuid())
+  id             String       @id @default(uuid())
   name           String
   description    String?
   organization   Organization @relation(fields: [organizationId], references: [id])
   organizationId String
   /// userId of the admin who created this group
   createdBy      String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  credentials    CredentialGroupEntry[]
-  members        CredentialGroupMember[]
+  credentials CredentialGroupEntry[]
+  members     CredentialGroupMember[]
 
   @@unique([name, organizationId])
   @@index([organizationId])
@@ -402,50 +431,51 @@ model CredentialShare {
 // ─── 2FA Vault ────────────────────────────────────────────────────────────────
 
 model TwoFactorEntry {
-  id               String    @id @default(uuid())
+  id String @id @default(uuid())
 
-  organization     Organization @relation(fields: [organizationId], references: [id])
-  organizationId   String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
-  appName          String
-  issuer           String?
-  accountLabel     String?
+  appName      String
+  issuer       String?
+  accountLabel String?
 
   /// AES-256-GCM ciphertext — NEVER returned in any API response
-  encryptedSecret  String
+  encryptedSecret String
 
   /// "SHA1" | "SHA256" | "SHA512"
-  algorithm        String    @default("SHA1")
-  digits           Int       @default(6)
-  period           Int       @default(30)
+  algorithm String @default("SHA1")
+  digits    Int    @default(6)
+  period    Int    @default(30)
 
-  category         String?
-  environment      String?
-  notes            String?
-  allowNotesForUsers Boolean  @default(false)
+  category           String?
+  environment        String?
+  notes              String?
+  allowNotesForUsers Boolean @default(false)
 
   /// "active" | "disabled"
-  status           String    @default("active")
+  status String @default("active")
 
-  createdBy        User      @relation("TwoFactorCreatedBy", fields: [createdById], references: [id])
-  createdById      String
-  owner            User?     @relation("TwoFactorOwner", fields: [ownerId], references: [id])
-  ownerId          String?
+  createdBy   User    @relation("TwoFactorCreatedBy", fields: [createdById], references: [id])
+  createdById String
+  owner       User?   @relation("TwoFactorOwner", fields: [ownerId], references: [id])
+  ownerId     String?
 
-  resource         Resource?         @relation("ResourceTwoFactor", fields: [resourceId], references: [id], onDelete: SetNull)
-  resourceId       String?
-  awsResource      AwsResource?      @relation("AwsResourceTwoFactor", fields: [awsResourceId], references: [id], onDelete: SetNull)
-  awsResourceId    String?
-  credential       SharedCredential? @relation("CredentialTwoFactor", fields: [credentialId], references: [id], onDelete: SetNull)
-  credentialId     String?
+  resource      Resource?         @relation("ResourceTwoFactor", fields: [resourceId], references: [id], onDelete: SetNull)
+  resourceId    String?
+  awsResource   AwsResource?      @relation("AwsResourceTwoFactor", fields: [awsResourceId], references: [id], onDelete: SetNull)
+  awsResourceId String?
+  credential    SharedCredential? @relation("CredentialTwoFactor", fields: [credentialId], references: [id], onDelete: SetNull)
+  credentialId  String?
 
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  deletedAt        DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
-  assignments      TwoFactorAssignment[]
-  accessLogs       TwoFactorAccessLog[]
-  secretVersions   TwoFactorSecretVersion[]
+  assignments    TwoFactorAssignment[]
+  accessLogs     TwoFactorAccessLog[]
+  secretVersions TwoFactorSecretVersion[]
+  vaultRequests  VaultRequest[]
 
   @@index([organizationId])
   @@index([status])
@@ -454,21 +484,21 @@ model TwoFactorEntry {
 }
 
 model TwoFactorAssignment {
-  id               String    @id @default(uuid())
+  id String @id @default(uuid())
 
-  organization     Organization @relation(fields: [organizationId], references: [id])
-  organizationId   String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
 
   entry            TwoFactorEntry @relation(fields: [twoFactorEntryId], references: [id], onDelete: Cascade)
   twoFactorEntryId String
 
-  assignedToUser   User?     @relation("TwoFactorAssignedToUser", fields: [assignedToUserId], references: [id])
+  assignedToUser   User?   @relation("TwoFactorAssignedToUser", fields: [assignedToUserId], references: [id])
   assignedToUserId String?
 
-  assignedBy       User      @relation("TwoFactorAssignedBy", fields: [assignedById], references: [id])
-  assignedById     String
+  assignedBy   User   @relation("TwoFactorAssignedBy", fields: [assignedById], references: [id])
+  assignedById String
 
-  createdAt        DateTime  @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([twoFactorEntryId, assignedToUserId])
   @@index([organizationId])
@@ -478,24 +508,24 @@ model TwoFactorAssignment {
 
 /// Immutable OTP access log — append-only, never updated or deleted.
 model TwoFactorAccessLog {
-  id               String    @id @default(uuid())
+  id String @id @default(uuid())
 
   entry            TwoFactorEntry @relation(fields: [twoFactorEntryId], references: [id])
   twoFactorEntryId String
 
-  organizationId   String
+  organizationId String
 
-  user             User?     @relation(fields: [userId], references: [id])
-  userId           String?
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String?
 
   /// "otp_viewed" | "otp_copied" | "unauthorized_access_attempt"
-  action           String
+  action String
 
-  ipAddress        String?
-  userAgent        String?
-  outcome          String
-  details          Json?
-  timestamp        DateTime  @default(now())
+  ipAddress String?
+  userAgent String?
+  outcome   String
+  details   Json?
+  timestamp DateTime @default(now())
 
   @@index([twoFactorEntryId])
   @@index([organizationId])
@@ -506,18 +536,183 @@ model TwoFactorAccessLog {
 
 /// Append-only secret rotation history.
 model TwoFactorSecretVersion {
-  id               String    @id @default(uuid())
+  id String @id @default(uuid())
 
   entry            TwoFactorEntry @relation(fields: [twoFactorEntryId], references: [id], onDelete: Cascade)
   twoFactorEntryId String
 
-  encryptedSecret  String
-  version          Int
+  encryptedSecret String
+  version         Int
 
-  rotatedBy        User      @relation(fields: [rotatedById], references: [id])
-  rotatedById      String
+  rotatedBy   User   @relation(fields: [rotatedById], references: [id])
+  rotatedById String
 
-  createdAt        DateTime  @default(now())
+  createdAt DateTime @default(now())
 
   @@index([twoFactorEntryId])
+}
+
+// ─── Personal Vault ───────────────────────────────────────────────────────────
+//
+// Private per-user credentials and 2FA entries. Isolated by ownerUserId — never
+// joined into any org/admin query. Not visible to org admins/owners, resource
+// owners, or super_admin (no break-glass path implemented; private by design).
+
+model PersonalCredential {
+  id String @id @default(uuid())
+
+  owner       User   @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  ownerUserId String
+
+  appName     String
+  loginUrl    String?
+  description String?
+
+  /// AES-256-GCM encrypted JSON: {"username":"...","password":"..."}
+  encryptedPayload String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerUserId])
+}
+
+model PersonalTwoFactorEntry {
+  id String @id @default(uuid())
+
+  owner       User   @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  ownerUserId String
+
+  appName      String
+  issuer       String?
+  accountLabel String?
+
+  /// AES-256-GCM ciphertext — NEVER returned in any API response
+  encryptedSecret String
+
+  algorithm String @default("SHA1")
+  digits    Int    @default(6)
+  period    Int    @default(30)
+
+  notes String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  secretVersions PersonalTwoFactorSecretVersion[]
+
+  @@index([ownerUserId])
+  @@index([deletedAt])
+}
+
+/// Append-only secret rotation history for personal 2FA entries.
+model PersonalTwoFactorSecretVersion {
+  id String @id @default(uuid())
+
+  entry   PersonalTwoFactorEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entryId String
+
+  encryptedSecret String
+  version         Int
+
+  rotatedBy   User   @relation(fields: [rotatedById], references: [id])
+  rotatedById String
+
+  createdAt DateTime @default(now())
+
+  @@index([entryId])
+}
+
+/// Append-only access log for personal vault reveal/OTP actions.
+model PersonalVaultAccessLog {
+  id String @id @default(uuid())
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  /// "credential_created" | "credential_updated" | "credential_deleted" | "credential_revealed"
+  /// "2fa_created" | "2fa_updated" | "2fa_deleted" | "2fa_otp_viewed" | "2fa_secret_rotated"
+  action     String
+  targetType String // "credential" | "2fa"
+  targetId   String
+
+  ipAddress String?
+  outcome   String
+  details   Json?
+  timestamp DateTime @default(now())
+
+  @@index([userId])
+  @@index([targetId])
+  @@index([timestamp])
+}
+
+// ─── Vault Requests (user → org admin approval flow) ──────────────────────────
+
+model VaultRequest {
+  id String @id @default(uuid())
+
+  /// "REQUEST_ORG_CREDENTIAL" | "REQUEST_ORG_2FA"
+  type String
+
+  /// "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED"
+  status String @default("PENDING")
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String
+
+  resource      Resource?    @relation("VaultRequestResource", fields: [resourceId], references: [id], onDelete: SetNull)
+  resourceId    String?
+  awsResource   AwsResource? @relation("VaultRequestAwsResource", fields: [awsResourceId], references: [id], onDelete: SetNull)
+  awsResourceId String?
+
+  appName       String
+  loginUrl      String?
+  justification String?
+
+  requestedBy   User   @relation("VaultRequestRequester", fields: [requestedById], references: [id])
+  requestedById String
+
+  reviewedBy   User?     @relation("VaultRequestReviewer", fields: [reviewedById], references: [id])
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+
+  /// Set once an admin fulfils an APPROVED request by creating the real record
+  createdCredential       SharedCredential? @relation("VaultRequestCredential", fields: [createdCredentialId], references: [id], onDelete: SetNull)
+  createdCredentialId     String?
+  createdTwoFactorEntry   TwoFactorEntry?   @relation(fields: [createdTwoFactorEntryId], references: [id], onDelete: SetNull)
+  createdTwoFactorEntryId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([requestedById])
+}
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+model Notification {
+  id String @id @default(uuid())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  /// "vault_request_created" | "vault_request_approved" | "vault_request_rejected" | "vault_request_completed"
+  type String
+
+  title String
+  body  String?
+
+  /// Related VaultRequest id, if applicable
+  relatedId String?
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([userId, readAt])
+  @@index([createdAt])
 }

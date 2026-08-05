@@ -7,7 +7,7 @@ import {
   Tabs, Tab, List, ListItem, ListItemText, ListItemSecondaryAction, Grid,
   Autocomplete, TablePagination, InputAdornment, Checkbox, Tooltip
 } from "@mui/material";
-import { Plus, X, Lock, Users, AppWindow, Search, Upload, Trash2 } from "lucide-react";
+import { Plus, X, Lock, Users, AppWindow, Search, Upload, Trash2, Pencil, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { useApp } from "@/lib/app-context";
 import ExcelImportModal from "./ExcelImportModal";
 
@@ -61,6 +61,13 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
   const [manageCredLoading, setManageCredLoading] = useState(false);
   const [shareUsers, setShareUsers] = useState<any[]>([]);
   const [addingShares, setAddingShares] = useState(false);
+
+  // Edit / reveal state (within Manage Credential dialog)
+  const [editCredForm, setEditCredForm] = useState({ appName: "", loginUrl: "", description: "", username: "", password: "" });
+  const [savingEditCred, setSavingEditCred] = useState(false);
+  const [revealedPassword, setRevealedPassword] = useState<string | null>(null);
+  const [revealingPassword, setRevealingPassword] = useState(false);
+  const [showRevealedPassword, setShowRevealedPassword] = useState(false);
 
   const [manageGroup, setManageGroup] = useState<any>(null);
   const [groupMemberUsers, setGroupMemberUsers] = useState<any[]>([]);
@@ -199,11 +206,48 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
 
   const openManageCred = async (id: string) => {
     setManageCredLoading(true);
+    setRevealedPassword(null);
+    setShowRevealedPassword(false);
     try {
       const res = await fetch(`/api/admin/credentials/${id}`);
       if (!res.ok) throw new Error("Failed to load credential details");
-      setManageCred(await res.json()); setShareUsers([]);
+      const data = await res.json();
+      setManageCred(data);
+      setEditCredForm({ appName: data.appName, loginUrl: data.loginUrl || "", description: data.description || "", username: data.username || "", password: "" });
+      setShareUsers([]);
     } catch (err: any) { onError(err.message); } finally { setManageCredLoading(false); }
+  };
+
+  const handleUpdateCredential = async () => {
+    if (!manageCred) return;
+    setSavingEditCred(true);
+    try {
+      const res = await fetch(`/api/admin/credentials/${manageCred.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editCredForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update credential");
+      onSuccess("Credential updated.");
+      setEditCredForm((p) => ({ ...p, password: "" }));
+      setRevealedPassword(null);
+      openManageCred(manageCred.id);
+      fetchData(selectedOrgId);
+    } catch (err: any) { onError(err.message); } finally { setSavingEditCred(false); }
+  };
+
+  const handleRevealPassword = async () => {
+    if (!manageCred) return;
+    if (revealedPassword !== null) { setShowRevealedPassword((s) => !s); return; }
+    setRevealingPassword(true);
+    try {
+      const res = await fetch(`/api/admin/credentials/${manageCred.id}/reveal`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to reveal password");
+      setRevealedPassword(data.password);
+      setShowRevealedPassword(true);
+    } catch (err: any) { onError(err.message); } finally { setRevealingPassword(false); }
   };
 
   const handleAddShare = async () => {
@@ -401,7 +445,15 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
                   </Box>
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0 }}>
                     <Chip icon={<Lock size={14} />} label="Encrypted" size="small" color="success" variant="outlined" />
-                    {canDelete && (
+                    {(cred.canEdit ?? canDelete) && (
+                      <Tooltip title="Edit credential">
+                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); openManageCred(cred.id); }}
+                          sx={{ bgcolor: 'rgba(99,102,241,0.08)', '&:hover': { bgcolor: 'rgba(99,102,241,0.18)' } }}>
+                          <Pencil size={14} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {(cred.canEdit ?? canDelete) && (
                       <Tooltip title="Delete credential">
                         <IconButton size="small" color="error" onClick={(e) => handleDeleteSingleCred(cred.id, e)}
                           sx={{ bgcolor: 'rgba(239,68,68,0.08)', '&:hover': { bgcolor: 'rgba(239,68,68,0.18)' } }}>
@@ -524,13 +576,49 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
             <DialogContent dividers>
               <Grid container spacing={4}>
                 <Grid size={{ xs: 12, md: 6 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 2, color: 'text.secondary' }}>DECRYPTED PAYLOAD</Typography>
-                  <Paper sx={{ p: 3, borderRadius: 3, bgcolor: 'background.default' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 2, color: 'text.secondary' }}>
+                    {manageCred.canEdit ? "EDIT CREDENTIAL" : "CREDENTIAL DETAILS"}
+                  </Typography>
+                  {manageCred.canEdit ? (
                     <Stack spacing={2}>
-                      <Box><Typography variant="caption" sx={{ fontWeight: 700 }}>USERNAME</Typography><Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{manageCred.username}</Typography></Box>
-                      <Box><Typography variant="caption" sx={{ fontWeight: 700 }}>PASSWORD</Typography><Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{manageCred.password}</Typography></Box>
+                      <TextField fullWidth size="small" label="App Name" value={editCredForm.appName} onChange={(e) => setEditCredForm((p) => ({ ...p, appName: e.target.value }))} />
+                      <TextField fullWidth size="small" label="Login URL" value={editCredForm.loginUrl} onChange={(e) => setEditCredForm((p) => ({ ...p, loginUrl: e.target.value }))} />
+                      <TextField fullWidth size="small" label="Description" value={editCredForm.description} onChange={(e) => setEditCredForm((p) => ({ ...p, description: e.target.value }))} />
+                      <TextField fullWidth size="small" label="Username" value={editCredForm.username} onChange={(e) => setEditCredForm((p) => ({ ...p, username: e.target.value }))} />
+                      <TextField
+                        fullWidth size="small" label="New Password (leave blank to keep current)"
+                        type={showRevealedPassword ? "text" : "password"}
+                        value={editCredForm.password}
+                        onChange={(e) => setEditCredForm((p) => ({ ...p, password: e.target.value }))}
+                        InputProps={{
+                          endAdornment: (
+                            <IconButton size="small" onClick={() => setShowRevealedPassword((s) => !s)}>
+                              {showRevealedPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </IconButton>
+                          ),
+                        }}
+                      />
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Button size="small" variant="outlined" startIcon={revealingPassword ? <CircularProgress size={14} /> : <Eye size={14} />}
+                          onClick={handleRevealPassword} disabled={revealingPassword}>
+                          {revealedPassword !== null ? (showRevealedPassword ? "Hide Current Password" : "Show Current Password") : "Reveal Current Password"}
+                        </Button>
+                      </Box>
+                      {revealedPassword !== null && showRevealedPassword && (
+                        <Alert severity="warning" sx={{ borderRadius: 2, fontFamily: 'monospace' }}>{revealedPassword}</Alert>
+                      )}
+                      <Button variant="contained" onClick={handleUpdateCredential} disabled={savingEditCred} startIcon={savingEditCred ? <CircularProgress size={16} color="inherit" /> : <RefreshCw size={14} />}>
+                        {savingEditCred ? "Saving..." : "Save Changes"}
+                      </Button>
                     </Stack>
-                  </Paper>
+                  ) : (
+                    <Paper sx={{ p: 3, borderRadius: 3, bgcolor: 'background.default' }}>
+                      <Stack spacing={2}>
+                        <Box><Typography variant="caption" sx={{ fontWeight: 700 }}>USERNAME</Typography><Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{manageCred.username}</Typography></Box>
+                        <Box><Typography variant="caption" sx={{ fontWeight: 700 }}>PASSWORD</Typography><Typography variant="body2" color="text.secondary">Hidden — you do not have permission to reveal this credential.</Typography></Box>
+                      </Stack>
+                    </Paper>
+                  )}
                 </Grid>
                 <Grid size={{ xs: 12, md: 6 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 2, color: 'text.secondary' }}>DIRECT USER SHARES</Typography>
@@ -558,7 +646,9 @@ export default function CredentialVaultPanel({ onSuccess, onError }: { onSuccess
               </Grid>
             </DialogContent>
             <DialogActions sx={{ p: 3, display: 'flex', justifyContent: 'space-between' }}>
-              <Button onClick={handleDeleteCredential} color="error" variant="text" sx={{ fontWeight: 700 }}>Delete Credential</Button>
+              {manageCred.canEdit ? (
+                <Button onClick={handleDeleteCredential} color="error" variant="text" sx={{ fontWeight: 700 }}>Delete Credential</Button>
+              ) : <Box />}
               <Button onClick={() => setManageCred(null)} variant="outlined">Close</Button>
             </DialogActions>
           </>

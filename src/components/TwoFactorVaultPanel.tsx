@@ -10,7 +10,7 @@ import {
 } from "@mui/material";
 import {
   Plus, X, Lock, Users, Search, Upload, ShieldCheck, Eye, EyeOff,
-  RefreshCw, QrCode, Link2, KeyRound, Clock, ClipboardList, FileStack, Camera,
+  RefreshCw, QrCode, Link2, KeyRound, Clock, ClipboardList, FileStack, Camera, Pencil,
 } from "lucide-react";
 import { useApp } from "@/lib/app-context";
 
@@ -728,6 +728,14 @@ export default function TwoFactorVaultPanel({
                     color={entry.status === "active" ? "success" : "default"}
                     variant={entry.status === "active" ? "filled" : "outlined"}
                   />
+                  {entry.canEdit && (
+                    <Tooltip title="Edit entry">
+                      <IconButton size="small" onClick={(e) => { e.stopPropagation(); openEdit(entry); }}
+                        sx={{ bgcolor: 'rgba(99,102,241,0.08)', '&:hover': { bgcolor: 'rgba(99,102,241,0.18)' } }}>
+                        <Pencil size={14} />
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </Stack>
               </Paper>
             ))}
@@ -1089,11 +1097,13 @@ export default function TwoFactorVaultPanel({
                       The raw TOTP secret is stored encrypted and is never accessible through any interface.
                     </Alert>
                   </Grid>
-                  <Grid size={{ xs: 12 }}>
-                    <Button variant="outlined" size="small" startIcon={<RefreshCw size={14} />} onClick={() => setOpenRotate(true)}>
-                      Rotate Secret
-                    </Button>
-                  </Grid>
+                  {manageEntry.canEdit && (
+                    <Grid size={{ xs: 12 }}>
+                      <Button variant="outlined" size="small" startIcon={<RefreshCw size={14} />} onClick={() => setOpenRotate(true)}>
+                        Rotate Secret
+                      </Button>
+                    </Grid>
+                  )}
                 </Grid>
               )}
 
@@ -1398,14 +1408,16 @@ export default function TwoFactorVaultPanel({
               )}
             </DialogContent>
             <DialogActions sx={{ p: 3, display: "flex", justifyContent: "space-between" }}>
+              {manageEntry.canEdit ? (
+                <Stack direction="row" spacing={1}>
+                  <Button color="error" variant="text" onClick={handleDelete}>Delete</Button>
+                  <Button variant="outlined" onClick={() => { handleToggleStatus(manageEntry); }}>
+                    {manageEntry.status === "active" ? "Disable" : "Enable"}
+                  </Button>
+                </Stack>
+              ) : <Box />}
               <Stack direction="row" spacing={1}>
-                <Button color="error" variant="text" onClick={handleDelete}>Delete</Button>
-                <Button variant="outlined" onClick={() => { handleToggleStatus(manageEntry); }}>
-                  {manageEntry.status === "active" ? "Disable" : "Enable"}
-                </Button>
-              </Stack>
-              <Stack direction="row" spacing={1}>
-                <Button onClick={() => openEdit(manageEntry)} variant="outlined">Edit Metadata</Button>
+                {manageEntry.canEdit && <Button onClick={() => openEdit(manageEntry)} variant="outlined">Edit Metadata</Button>}
                 <Button onClick={() => setManageEntry(null)} variant="contained">Close</Button>
               </Stack>
             </DialogActions>

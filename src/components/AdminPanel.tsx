@@ -73,8 +73,10 @@ import {
   Search,
   ShieldEllipsis,
   Copy,
+  Send,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import VaultRequestsPanel from "@/components/VaultRequestsPanel";
 
 // All managed policies that can be assigned to AWS resources.
 // Must stay in sync with MANAGED_POLICY_INLINE_MAP in aws-federation.service.ts.
@@ -3017,7 +3019,9 @@ export default function AdminPanel() {
   const theme = useTheme();
   const { user } = useApp();
   const isGlobalAdmin = user?.role === "admin" || user?.role === "super_admin";
-  const [activeTab, setActiveTab] = useState(0);
+  const hasOrgRoleEarly = (Object.values((user?.orgRoles || {}) as Record<string, string>)).some((r) => r === "admin" || r === "owner");
+  const isResourceOwnerOnly = !isGlobalAdmin && !hasOrgRoleEarly && !!(user as any)?.isResourceOwner;
+  const [activeTab, setActiveTab] = useState(isResourceOwnerOnly ? 5 : 0);
 
   const [editingWebResource, setEditingWebResource] = useState<any>(null);
   const [editingAwsResource, setEditingAwsResource] = useState<any>(null);
@@ -3034,8 +3038,8 @@ export default function AdminPanel() {
     setTimeout(() => setMessage(null), 5000);
   };
 
-  const hasOrgRole = (Object.values((user?.orgRoles || {}) as Record<string, string>)).some((r) => r === "admin" || r === "owner");
-  if (!isGlobalAdmin && !hasOrgRole) {
+  const hasOrgRole = hasOrgRoleEarly;
+  if (!isGlobalAdmin && !hasOrgRole && !isResourceOwnerOnly) {
     return (
       <Container maxWidth="sm" sx={{ mt: 10 }}>
         <Paper elevation={1} sx={{ p: 6, textAlign: 'center', borderRadius: 6, bgcolor: alpha(theme.palette.error.main, 0.05), border: `1px solid ${alpha(theme.palette.error.main, 0.1)}` }}>
@@ -3067,13 +3071,14 @@ export default function AdminPanel() {
             '& .MuiTab-root': { fontWeight: 800, fontSize: '0.7rem', letterSpacing: '0.05em', px: 2, minWidth: 'auto' }
           }}
         >
-          <Tab icon={<Rocket size={18} />} iconPosition="start" label="PROVISION" value={0} />
-          <Tab icon={<Combine size={18} />} iconPosition="start" label="RESOURCES" value={1} />
-          <Tab icon={<Users size={18} />} iconPosition="start" label="IDENTITIES" value={2} />
+          {!isResourceOwnerOnly && <Tab icon={<Rocket size={18} />} iconPosition="start" label="PROVISION" value={0} />}
+          {!isResourceOwnerOnly && <Tab icon={<Combine size={18} />} iconPosition="start" label="RESOURCES" value={1} />}
+          {!isResourceOwnerOnly && <Tab icon={<Users size={18} />} iconPosition="start" label="IDENTITIES" value={2} />}
           {isGlobalAdmin && <Tab icon={<ClipboardList size={18} />} iconPosition="start" label="AUDIT LOGS" value={3} />}
-          <Tab icon={<Building2 size={18} />} iconPosition="start" label="ORGANIZATIONS" value={4} />
+          {!isResourceOwnerOnly && <Tab icon={<Building2 size={18} />} iconPosition="start" label="ORGANIZATIONS" value={4} />}
           <Tab icon={<KeyRound size={18} />} iconPosition="start" label="CREDENTIAL VAULT" value={5} />
           <Tab icon={<ShieldEllipsis size={18} />} iconPosition="start" label="2FA VAULT" value={6} />
+          <Tab icon={<Send size={18} />} iconPosition="start" label="REQUESTS" value={7} />
         </Tabs>
       </Box>
 
@@ -3221,6 +3226,17 @@ export default function AdminPanel() {
                 <ShieldEllipsis size={16} /> 2FA Vault
               </Typography>
               <TwoFactorVaultPanel onSuccess={handleSuccess} onError={handleError} />
+            </Box>
+          </motion.div>
+        )}
+
+        {activeTab === 7 && (
+          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}>
+            <Box>
+              <Typography variant="caption" sx={{ mb: 6, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'primary.main', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase' }}>
+                <Send size={16} /> Vault Requests
+              </Typography>
+              <VaultRequestsPanel onSuccess={handleSuccess} onError={handleError} />
             </Box>
           </motion.div>
         )}

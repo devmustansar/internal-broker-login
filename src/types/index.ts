@@ -156,6 +156,8 @@ export interface AuthContext {
   organizationIds: string[];
   /** Per-org role mappings — { orgId: "owner" | "admin" | "member" } */
   orgRoles: Record<string, OrgRole>;
+  /** True if this user owns at least one Resource/AwsResource/SharedCredential. Coarse UI gate only. */
+  isResourceOwner?: boolean;
   iat?: number;
   exp?: number;
 }
@@ -311,7 +313,28 @@ export type AuditAction =
   | "2fa_otp_copied"
   | "2fa_unauthorized_access"
   | "2fa_secret_rotated"
-  | "2fa_qr_parsed";
+  | "2fa_qr_parsed"
+  // ─── Credential Vault (update/reveal) ──────────────────────────────────────
+  | "credential_updated"
+  | "credential_secret_rotated"
+  | "credential_revealed"
+  | "credential_deleted"
+  | "credential_created"
+  // ─── Personal Vault ─────────────────────────────────────────────────────────
+  | "personal_credential_created"
+  | "personal_credential_updated"
+  | "personal_credential_revealed"
+  | "personal_credential_deleted"
+  | "personal_2fa_created"
+  | "personal_2fa_updated"
+  | "personal_2fa_deleted"
+  | "personal_2fa_otp_viewed"
+  | "personal_2fa_secret_rotated"
+  // ─── Vault Requests ─────────────────────────────────────────────────────────
+  | "vault_request_created"
+  | "vault_request_approved"
+  | "vault_request_rejected"
+  | "vault_request_completed";
 
 // ─── 2FA Vault Types ──────────────────────────────────────────────────────────
 

@@ -110,3 +110,62 @@ export function getAdminOrgIds(auth: AuthContext): string[] {
 
   return Array.from(ids);
 }
+
+// ─── Resource-Owner-Aware Edit Policies ───────────────────────────────────────
+//
+// A "Resource Owner" is a user set as Resource.ownerUserId / AwsResource.ownerUserId.
+// They gain edit rights over org credentials/2FA entries that are linked to
+// their owned resource, without needing org admin/owner role.
+
+/** Can the actor edit this SharedCredential? super_admin, org admin/owner, or the credential's resource-owner. */
+export function canEditCredential(
+  auth: AuthContext,
+  credential: { organizationId: string; ownerUserId?: string | null }
+): boolean {
+  if (isSuperAdmin(auth)) return true;
+  if (canManageOrg(auth, credential.organizationId)) return true;
+  return !!credential.ownerUserId && credential.ownerUserId === auth.userId;
+}
+
+/**
+ * Can the actor edit this TwoFactorEntry? super_admin, org admin/owner,
+ * the entry's own ownerId, or the owner of the linked Resource/AwsResource.
+ */
+export function canEditTwoFactorEntry(
+  auth: AuthContext,
+  entry: { organizationId: string; ownerId?: string | null },
+  linkedResourceOwnerId?: string | null,
+  linkedAwsResourceOwnerId?: string | null
+): boolean {
+  if (isSuperAdmin(auth)) return true;
+  if (canManageOrg(auth, entry.organizationId)) return true;
+  if (entry.ownerId && entry.ownerId === auth.userId) return true;
+  if (linkedResourceOwnerId && linkedResourceOwnerId === auth.userId) return true;
+  if (linkedAwsResourceOwnerId && linkedAwsResourceOwnerId === auth.userId) return true;
+  return false;
+}
+
+/** Can the actor approve/reject a VaultRequest for this org / resource? */
+export function canApproveVaultRequest(
+  auth: AuthContext,
+  request: { organizationId: string },
+  linkedResourceOwnerId?: string | null,
+  linkedAwsResourceOwnerId?: string | null
+): boolean {
+  if (isSuperAdmin(auth)) return true;
+  if (canManageOrg(auth, request.organizationId)) return true;
+  if (linkedResourceOwnerId && linkedResourceOwnerId === auth.userId) return true;
+  if (linkedAwsResourceOwnerId && linkedAwsResourceOwnerId === auth.userId) return true;
+  return false;
+}
+
+/** Can the actor create a request for this organization? Must be a member (any role). */
+export function canRequestForOrg(auth: AuthContext, organizationId: string): boolean {
+  if (isSuperAdmin(auth)) return true;
+  return (auth.organizationIds || []).includes(organizationId);
+}
+
+/** Coarse gate for vault management surfaces: org admin/owner/global-admin OR a resource owner. */
+export function canAccessVaultManagement(auth: AuthContext): boolean {
+  return isAdminOrAbove(auth) || !!auth.isResourceOwner;
+}

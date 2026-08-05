@@ -7,15 +7,29 @@ import {
   badRequest,
   serverError,
 } from "@/lib/api-helpers";
-import { canManageOrg, isSuperAdmin } from "@/lib/auth-policy";
+import { canEditTwoFactorEntry } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
 import {
   encryptSecret,
-  decryptSecret,
   logManagementAction,
 } from "@/server/services/two-factor.service";
 
+const VALID_ALGORITHMS = ["SHA1", "SHA256", "SHA512"];
+const VALID_DIGITS = [6, 8];
+const VALID_PERIODS = [30, 60];
+
 type Params = { params: Promise<{ id: string }> };
+
+/** Loads the entry plus owner ids of any linked resource, for canEditTwoFactorEntry checks. */
+async function loadEntryWithLinkedOwners(id: string) {
+  return prisma.twoFactorEntry.findUnique({
+    where: { id, deletedAt: null },
+    include: {
+      resource: { select: { ownerUserId: true } },
+      awsResource: { select: { ownerUserId: true } },
+    },
+  });
+}
 
 const ENTRY_SELECT = {
   id: true,
@@ -70,11 +84,15 @@ export async function GET(req: NextRequest, { params }: Params) {
     });
 
     if (!entry) return notFound("2FA entry not found");
-    if (!isSuperAdmin(auth) && !canManageOrg(auth, entry.organizationId)) {
+    const linkedOwners = await loadEntryWithLinkedOwners(id);
+    if (!canEditTwoFactorEntry(auth, entry, linkedOwners?.resource?.ownerUserId, linkedOwners?.awsResource?.ownerUserId)) {
       return forbidden();
     }
 
-    return NextResponse.json(entry);
+    return NextResponse.json({
+      ...entry,
+      canEdit: canEditTwoFactorEntry(auth, entry, linkedOwners?.resource?.ownerUserId, linkedOwners?.awsResource?.ownerUserId),
+    });
   } catch (err) {
     return serverError(err);
   }
@@ -90,11 +108,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!auth) return unauthorized();
 
     const { id } = await params;
-    const existing = await prisma.twoFactorEntry.findUnique({
-      where: { id, deletedAt: null },
-    });
+    const existing = await loadEntryWithLinkedOwners(id);
     if (!existing) return notFound("2FA entry not found");
-    if (!isSuperAdmin(auth) && !canManageOrg(auth, existing.organizationId)) {
+    if (!canEditTwoFactorEntry(auth, existing, existing.resource?.ownerUserId, existing.awsResource?.ownerUserId)) {
       return forbidden();
     }
 
@@ -104,6 +120,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (body.appName !== undefined) updateData.appName = body.appName.trim();
     if (body.issuer !== undefined) updateData.issuer = body.issuer;
     if (body.accountLabel !== undefined) updateData.accountLabel = body.accountLabel;
+    if (body.algorithm !== undefined) {
+      const algorithm = body.algorithm.toUpperCase();
+      if (!VALID_ALGORITHMS.includes(algorithm)) return badRequest(`algorithm must be one of: ${VALID_ALGORITHMS.join(", ")}`);
+      updateData.algorithm = algorithm;
+    }
+    if (body.digits !== undefined) {
+      const digits = parseInt(body.digits, 10);
+      if (!VALID_DIGITS.includes(digits)) return badRequest("digits must be 6 or 8");
+      updateData.digits = digits;
+    }
+    if (body.period !== undefined) {
+      const period = parseInt(body.period, 10);
+      if (!VALID_PERIODS.includes(period)) return badRequest("period must be 30 or 60");
+      updateData.period = period;
+    }
     if (body.category !== undefined) updateData.category = body.category;
     if (body.environment !== undefined) updateData.environment = body.environment;
     if (body.notes !== undefined) updateData.notes = body.notes;
@@ -179,11 +210,9 @@ export async function DELETE(req: NextRequest, { params }: Params) {
     if (!auth) return unauthorized();
 
     const { id } = await params;
-    const existing = await prisma.twoFactorEntry.findUnique({
-      where: { id, deletedAt: null },
-    });
+    const existing = await loadEntryWithLinkedOwners(id);
     if (!existing) return notFound("2FA entry not found");
-    if (!isSuperAdmin(auth) && !canManageOrg(auth, existing.organizationId)) {
+    if (!canEditTwoFactorEntry(auth, existing, existing.resource?.ownerUserId, existing.awsResource?.ownerUserId)) {
       return forbidden();
     }
 

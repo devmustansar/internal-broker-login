@@ -19,6 +19,7 @@ export async function getAuthContext(
       role: (session.user as any).role,
       organizationIds: (session.user as any).organizationIds || [],
       orgRoles: (session.user as any).orgRoles || {},
+      isResourceOwner: (session.user as any).isResourceOwner || false,
     };
   }
 

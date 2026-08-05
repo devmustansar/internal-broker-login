@@ -6,7 +6,7 @@ import {
   badRequest,
   serverError,
 } from "@/lib/api-helpers";
-import { canManageOrg, getOrgFilter, isSuperAdmin } from "@/lib/auth-policy";
+import { canManageOrg, getOrgFilter, isSuperAdmin, isAdminOrAbove, canAccessVaultManagement } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
 import {
   encryptSecret,
@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);
     if (!auth) return unauthorized();
+    if (!canAccessVaultManagement(auth)) return forbidden();
 
     const p = req.nextUrl.searchParams;
     const orgId = p.get("organizationId");
@@ -47,12 +48,25 @@ export async function GET(req: NextRequest) {
       ? { organizationId: orgId }
       : getOrgFilter(auth);
 
-    if (orgId && !isSuperAdmin(auth) && !canManageOrg(auth, orgId)) {
+    if (orgId && !isSuperAdmin(auth) && !canManageOrg(auth, orgId) && !auth.isResourceOwner) {
       return forbidden();
     }
 
+    // Resource owners without org admin rights only see entries they own,
+    // or entries linked to a resource/AWS resource they own.
+    const ownershipFilter = isAdminOrAbove(auth)
+      ? {}
+      : {
+          OR: [
+            { ownerId: auth.userId },
+            { resource: { ownerUserId: auth.userId } },
+            { awsResource: { ownerUserId: auth.userId } },
+          ],
+        };
+
     const where: any = {
       ...orgFilter,
+      ...ownershipFilter,
       deletedAt: null,
       ...(category ? { category } : {}),
       ...(environment ? { environment } : {}),
@@ -113,6 +127,8 @@ export async function GET(req: NextRequest) {
         awsResourceName: awsResource?.name ?? null,
         awsResourceKey: awsResource?.resourceKey ?? null,
         credentialAppName: credential?.appName ?? null,
+        // orgFilter + ownershipFilter above already scope results to editable rows only
+        canEdit: true,
       })),
       total,
       page,

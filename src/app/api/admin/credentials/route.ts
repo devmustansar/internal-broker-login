@@ -6,7 +6,7 @@ import {
   badRequest,
   serverError,
 } from "@/lib/api-helpers";
-import { isAdminOrAbove, isSuperAdmin, getOrgFilter } from "@/lib/auth-policy";
+import { isAdminOrAbove, getOrgFilter, canAccessVaultManagement } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
 import { encryptPayload, decryptPayload } from "@/server/secrets/encryption";
 
@@ -14,18 +14,20 @@ import { encryptPayload, decryptPayload } from "@/server/secrets/encryption";
  * GET /api/admin/credentials
  * List credentials for the admin's orgs (metadata only — encrypted payload is never returned).
  * Optionally filter by ?organizationId=xxx
+ * Resource owners who are not org admins only see credentials they own.
  */
 export async function GET(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);
     if (!auth) return unauthorized();
-    if (!isAdminOrAbove(auth)) return forbidden();
+    if (!canAccessVaultManagement(auth)) return forbidden();
 
     const orgId = req.nextUrl.searchParams.get("organizationId");
-    const orgFilter = orgId ? { organizationId: orgId } : getOrgFilter(auth);
+    const scopeFilter = orgId ? { organizationId: orgId } : getOrgFilter(auth);
+    const where = isAdminOrAbove(auth) ? scopeFilter : { ...scopeFilter, ownerUserId: auth.userId };
 
     const credentials = await prisma.sharedCredential.findMany({
-      where: orgFilter,
+      where,
       select: {
         id: true,
         appName: true,
@@ -33,6 +35,7 @@ export async function GET(req: NextRequest) {
         description: true,
         organizationId: true,
         createdBy: true,
+        ownerUserId: true,
         createdAt: true,
         updatedAt: true,
         encryptedPayload: true,
@@ -59,7 +62,8 @@ export async function GET(req: NextRequest) {
         // leave null if decryption fails for any reason
       }
       const { encryptedPayload: _, ...rest } = cred;
-      return { ...rest, username };
+      const canEdit = isAdminOrAbove(auth) || cred.ownerUserId === auth.userId;
+      return { ...rest, username, canEdit };
     });
 
     return NextResponse.json(result);

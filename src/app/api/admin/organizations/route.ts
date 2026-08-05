@@ -6,19 +6,20 @@ import {
   badRequest,
   serverError,
 } from "@/lib/api-helpers";
-import { isSuperAdmin, isAdminOrAbove, isOrgOwner } from "@/lib/auth-policy";
+import { isSuperAdmin, isAdminOrAbove, isOrgOwner, getAdminOrgIds, canAccessVaultManagement } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
 
 /**
  * GET /api/admin/organizations
  * Super admin: returns all organizations with counts.
  * Org admin/owner: returns only their admin-level organizations.
+ * Resource owner (no org role): returns only orgs where they own a resource/credential.
  */
 export async function GET(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);
     if (!auth) return unauthorized();
-    if (!isAdminOrAbove(auth)) return forbidden();
+    if (!canAccessVaultManagement(auth)) return forbidden();
 
     const includeOpts = {
       _count: { select: { resources: true, awsResources: true, users: true } },
@@ -32,26 +33,28 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(orgs);
     }
 
-    // Org admin/owner: only orgs where they hold admin or owner role
-    // Also includes orgs from legacy global "admin" role
-    const orgRoles = auth.orgRoles || {};
-    const adminOrgIds = new Set<string>();
-
-    for (const [orgId, role] of Object.entries(orgRoles)) {
-      if (role === "admin" || role === "owner") {
-        adminOrgIds.add(orgId);
-      }
+    if (isAdminOrAbove(auth)) {
+      const orgs = await prisma.organization.findMany({
+        where: { id: { in: getAdminOrgIds(auth) } },
+        orderBy: { name: "asc" },
+        include: includeOpts,
+      });
+      return NextResponse.json(orgs);
     }
 
-    // Legacy: global admin role → all assigned orgs
-    if (auth.role === "admin") {
-      for (const orgId of auth.organizationIds || []) {
-        adminOrgIds.add(orgId);
-      }
+    // Resource owner only: orgs where they own a resource, AWS resource, or credential
+    const [ownedResources, ownedAwsResources, ownedCredentials] = await Promise.all([
+      prisma.resource.findMany({ where: { ownerUserId: auth.userId }, select: { organizationId: true } }),
+      prisma.awsResource.findMany({ where: { ownerUserId: auth.userId }, select: { organizationId: true } }),
+      prisma.sharedCredential.findMany({ where: { ownerUserId: auth.userId }, select: { organizationId: true } }),
+    ]);
+    const orgIds = new Set<string>();
+    for (const r of [...ownedResources, ...ownedAwsResources, ...ownedCredentials]) {
+      if (r.organizationId) orgIds.add(r.organizationId);
     }
 
     const orgs = await prisma.organization.findMany({
-      where: { id: { in: Array.from(adminOrgIds) } },
+      where: { id: { in: Array.from(orgIds) } },
       orderBy: { name: "asc" },
       include: includeOpts,
     });

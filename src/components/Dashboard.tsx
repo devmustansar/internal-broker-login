@@ -14,6 +14,8 @@ import {
 import AdminPanel from "@/components/AdminPanel";
 import UserCredentialVault from "@/components/UserCredentialVault";
 import UserTwoFactorVault from "@/components/UserTwoFactorVault";
+import PersonalVaultPanel from "@/components/PersonalVaultPanel";
+import UserVaultRequests from "@/components/UserVaultRequests";
 import { APP_DESCRIPTION, APP_ADMIN_DESCRIPTION } from "@/lib/constants";
 import {
   Box,
@@ -45,6 +47,8 @@ import {
   Database,
   Search,
   ShieldEllipsis,
+  Lock,
+  Send,
   X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -55,7 +59,8 @@ export default function Dashboard() {
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [resourceError, setResourceError] = useState<string | null>(null);
   const [modal, setModal] = useState<OpenAppResponse | null>(null);
-  const [view, setView] = useState<"apps" | "credentials" | "2fa" | "admin">("apps");
+  const [view, setView] = useState<"apps" | "credentials" | "2fa" | "personal" | "requests" | "admin">("apps");
+  const [personalMessage, setPersonalMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Org admin/owner: view resources for a specific user
   const [orgUsers, setOrgUsers] = useState<any[]>([]);
@@ -171,6 +176,22 @@ export default function Dashboard() {
               >
                 Authenticator Codes
               </Button>
+              <Button
+                variant={view === 'personal' ? 'contained' : 'text'}
+                onClick={() => setView('personal')}
+                startIcon={<Lock size={16} />}
+                sx={{ borderRadius: 2.5, px: 2, py: 0.8, color: view === 'personal' ? 'white' : 'text.secondary' }}
+              >
+                Personal Vault
+              </Button>
+              <Button
+                variant={view === 'requests' ? 'contained' : 'text'}
+                onClick={() => setView('requests')}
+                startIcon={<Send size={16} />}
+                sx={{ borderRadius: 2.5, px: 2, py: 0.8, color: view === 'requests' ? 'white' : 'text.secondary' }}
+              >
+                My Requests
+              </Button>
               {(user?.role === "admin" || user?.role === "super_admin" || (Object.values((user?.orgRoles || {}) as Record<string, string>)).some((r) => r === "admin" || r === "owner")) && (
                 <Button 
                   variant={view === 'admin' ? 'contained' : 'text'}
@@ -215,6 +236,34 @@ export default function Dashboard() {
           <Fade in={true}>
             <Box>
               <UserTwoFactorVault />
+            </Box>
+          </Fade>
+        ) : view === "personal" ? (
+          <Fade in={true}>
+            <Box>
+              {personalMessage && (
+                <Alert severity={personalMessage.type} sx={{ mb: 3, borderRadius: 3 }} onClose={() => setPersonalMessage(null)}>
+                  {personalMessage.text}
+                </Alert>
+              )}
+              <PersonalVaultPanel
+                onSuccess={(msg) => setPersonalMessage({ type: "success", text: msg })}
+                onError={(msg) => setPersonalMessage({ type: "error", text: msg })}
+              />
+            </Box>
+          </Fade>
+        ) : view === "requests" ? (
+          <Fade in={true}>
+            <Box>
+              {personalMessage && (
+                <Alert severity={personalMessage.type} sx={{ mb: 3, borderRadius: 3 }} onClose={() => setPersonalMessage(null)}>
+                  {personalMessage.text}
+                </Alert>
+              )}
+              <UserVaultRequests
+                onSuccess={(msg) => setPersonalMessage({ type: "success", text: msg })}
+                onError={(msg) => setPersonalMessage({ type: "error", text: msg })}
+              />
             </Box>
           </Fade>
         ) : view === "apps" ? (

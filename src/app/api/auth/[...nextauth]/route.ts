@@ -82,6 +82,16 @@ export const authOptions: NextAuthOptions = {
             orgRoles[o.organizationId] = o.role;
           }
           token.orgRoles = orgRoles;
+
+          // Resource Owner flag — true if this user owns at least one resource,
+          // AWS resource, or shared credential. Used only as a coarse UI gate;
+          // actual edit rights are re-checked per-record server-side.
+          const [ownedResource, ownedAwsResource, ownedCredential] = await Promise.all([
+            prisma.resource.findFirst({ where: { ownerUserId: dbUser.id }, select: { id: true } }),
+            prisma.awsResource.findFirst({ where: { ownerUserId: dbUser.id }, select: { id: true } }),
+            prisma.sharedCredential.findFirst({ where: { ownerUserId: dbUser.id }, select: { id: true } }),
+          ]);
+          token.isResourceOwner = !!(ownedResource || ownedAwsResource || ownedCredential);
         }
       }
       return token;
@@ -92,6 +102,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).role = token.role;
         (session.user as any).organizationIds = token.organizationIds || [];
         (session.user as any).orgRoles = token.orgRoles || {};
+        (session.user as any).isResourceOwner = token.isResourceOwner || false;
       }
       return session;
     },
