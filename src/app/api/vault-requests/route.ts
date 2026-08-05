@@ -9,8 +9,24 @@ import {
 import { canRequestForOrg, isAdminOrAbove, getOrgFilter } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
 import { notifyUsers, getVaultRequestStakeholderIds } from "@/server/services/notification.service";
+import { encryptPayload } from "@/server/secrets/encryption";
+import { encryptSecret, parseOtpAuthUri } from "@/server/services/two-factor.service";
 
 const VALID_TYPES = ["REQUEST_ORG_CREDENTIAL", "REQUEST_ORG_2FA"];
+const VALID_ALGORITHMS = ["SHA1", "SHA256", "SHA512"];
+const VALID_DIGITS = [6, 8];
+const VALID_PERIODS = [30, 60];
+const BASE32_RE = /^[A-Z2-7]+=*$/i;
+
+function validateBase32Secret(s: string): string | null {
+  const clean = s.toUpperCase().replace(/\s/g, "");
+  if (!BASE32_RE.test(clean)) return null;
+  if (clean.replace(/=+$/, "").length < 16) return null;
+  return clean;
+}
+
+/** Never select the encrypted secret columns in list/detail responses — only /reveal returns them. */
+const REQUEST_OMIT = { encryptedPayload: true, encryptedSecret: true } as const;
 
 /**
  * GET /api/vault-requests
@@ -50,6 +66,7 @@ export async function GET(req: NextRequest) {
     const requests = await prisma.vaultRequest.findMany({
       where,
       orderBy: { createdAt: "desc" },
+      omit: REQUEST_OMIT,
       include: {
         requestedBy: { select: { id: true, name: true, email: true } },
         reviewedBy: { select: { id: true, name: true, email: true } },
@@ -86,6 +103,50 @@ export async function POST(req: NextRequest) {
       return forbidden("You must belong to this organization to request access for it");
     }
 
+    // The requester supplies the actual secret material up front — it's encrypted
+    // immediately and only ever surfaced again via the audited /reveal endpoint.
+    let encryptedPayload: string | null = null;
+    let encryptedSecret: string | null = null;
+    let algorithm: string | null = null;
+    let digits: number | null = null;
+    let period: number | null = null;
+
+    if (type === "REQUEST_ORG_CREDENTIAL") {
+      const { username, password } = data;
+      if (!username || !password) return badRequest("username and password are required");
+      encryptedPayload = encryptPayload({ username, password });
+    } else {
+      const { inputMode = "manual" } = data;
+      let secret: string;
+      algorithm = (data.algorithm?.toUpperCase() ?? "SHA1");
+      digits = parseInt(data.digits ?? "6", 10);
+      period = parseInt(data.period ?? "30", 10);
+
+      if (inputMode === "uri") {
+        if (!data.uri) return badRequest("uri is required for inputMode=uri");
+        try {
+          const parsed = parseOtpAuthUri(data.uri);
+          secret = parsed.secret;
+          algorithm = data.algorithm?.toUpperCase() ?? parsed.algorithm;
+          digits = parseInt(data.digits ?? String(parsed.digits), 10);
+          period = parseInt(data.period ?? String(parsed.period), 10);
+        } catch (e: any) {
+          return badRequest(e.message || "Invalid otpauth URI");
+        }
+      } else {
+        if (!data.secret) return badRequest("secret is required");
+        const clean = validateBase32Secret(data.secret);
+        if (!clean) return badRequest("Invalid Base32 secret");
+        secret = clean;
+      }
+
+      if (!VALID_ALGORITHMS.includes(algorithm!)) return badRequest(`algorithm must be one of: ${VALID_ALGORITHMS.join(", ")}`);
+      if (!VALID_DIGITS.includes(digits!)) return badRequest("digits must be 6 or 8");
+      if (!VALID_PERIODS.includes(period!)) return badRequest("period must be 30 or 60");
+
+      encryptedSecret = encryptSecret(secret);
+    }
+
     let resourceOwnerUserId: string | null = null;
     let awsResourceOwnerUserId: string | null = null;
 
@@ -110,7 +171,13 @@ export async function POST(req: NextRequest) {
         loginUrl: loginUrl || null,
         justification: justification || null,
         requestedById: auth.userId,
+        encryptedPayload,
+        encryptedSecret,
+        algorithm,
+        digits,
+        period,
       },
+      omit: REQUEST_OMIT,
     });
 
     const stakeholderIds = await getVaultRequestStakeholderIds({

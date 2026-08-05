@@ -13,6 +13,8 @@ import { notifyUsers } from "@/server/services/notification.service";
 
 type Params = { params: Promise<{ id: string }> };
 
+const REQUEST_OMIT = { encryptedPayload: true, encryptedSecret: true } as const;
+
 /**
  * GET /api/vault-requests/[id]
  */
@@ -24,6 +26,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     const { id } = await params;
     const request = await prisma.vaultRequest.findUnique({
       where: { id },
+      omit: REQUEST_OMIT,
       include: {
         requestedBy: { select: { id: true, name: true, email: true } },
         reviewedBy: { select: { id: true, name: true, email: true } },
@@ -81,7 +84,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         reviewedById: auth.userId,
         reviewedAt: new Date(),
         reviewNote: body.reviewNote || null,
+        // A rejected request's secret is no longer needed anywhere — purge it immediately
+        // rather than leaving submitted credentials sitting encrypted-at-rest indefinitely.
+        ...(body.status === "REJECTED"
+          ? { encryptedPayload: null, encryptedSecret: null, algorithm: null, digits: null, period: null }
+          : {}),
       },
+      omit: REQUEST_OMIT,
     });
 
     await notifyUsers([existing.requestedById], {

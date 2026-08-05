@@ -670,6 +670,16 @@ model VaultRequest {
   loginUrl      String?
   justification String?
 
+  /// Requester-submitted secret material — AES-256-GCM encrypted, set at creation time.
+  /// Exactly one of encryptedPayload (credential) / encryptedSecret (2FA) is populated, per `type`.
+  /// Never selected in list/detail responses — only via the /reveal endpoint. Purged (set null)
+  /// once the request is fulfilled (secret then lives solely in the created record) or rejected.
+  encryptedPayload String? // credential: JSON {"username":"...","password":"..."}
+  encryptedSecret  String? // 2fa: Base32 TOTP secret
+  algorithm        String? // 2fa only
+  digits           Int? // 2fa only
+  period           Int? // 2fa only
+
   requestedBy   User   @relation("VaultRequestRequester", fields: [requestedById], references: [id])
   requestedById String
 

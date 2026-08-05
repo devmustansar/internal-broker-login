@@ -3,10 +3,9 @@
 import { useState, useEffect } from "react";
 import {
   Box, Typography, Button, TextField, Stack, Paper, Chip, Dialog, DialogTitle,
-  DialogContent, DialogActions, CircularProgress, Alert, FormControl, InputLabel,
-  Select, MenuItem, Tabs, Tab,
+  DialogContent, DialogActions, CircularProgress, Alert, Tabs, Tab,
 } from "@mui/material";
-import { Check, X, Send, Eye, EyeOff } from "lucide-react";
+import { Check, X, Send, Eye, EyeOff, Lock } from "lucide-react";
 
 const STATUS_COLOR: Record<string, "default" | "warning" | "success" | "error" | "info"> = {
   PENDING: "warning", APPROVED: "info", REJECTED: "error", COMPLETED: "success",
@@ -24,10 +23,13 @@ export default function VaultRequestsPanel({ onSuccess, onError }: { onSuccess: 
   const [reviewNote, setReviewNote] = useState("");
   const [reviewing, setReviewing] = useState(false);
 
+  // Reveal-then-fulfil: admin verifies the requester's own submitted secret, then
+  // creates the record from it — the admin never types a secret in themselves.
   const [fulfilTarget, setFulfilTarget] = useState<any>(null);
-  const [credForm, setCredForm] = useState({ username: "", password: "", description: "" });
-  const [faForm, setFaForm] = useState({ secret: "", algorithm: "SHA1", digits: "6", period: "30" });
+  const [revealData, setRevealData] = useState<any>(null);
+  const [revealing, setRevealing] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
+  const [description, setDescription] = useState("");
   const [fulfilling, setFulfilling] = useState(false);
 
   const fetchRequests = async () => {
@@ -63,11 +65,18 @@ export default function VaultRequestsPanel({ onSuccess, onError }: { onSuccess: 
     } catch (e: any) { onError(e.message); } finally { setReviewing(false); }
   };
 
-  const openFulfil = (r: any) => {
+  const openFulfil = async (r: any) => {
     setFulfilTarget(r);
-    setCredForm({ username: "", password: "", description: "" });
-    setFaForm({ secret: "", algorithm: "SHA1", digits: "6", period: "30" });
+    setRevealData(null);
     setShowSecret(false);
+    setDescription("");
+    setRevealing(true);
+    try {
+      const res = await fetch(`/api/vault-requests/${r.id}/reveal`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to load submitted secret");
+      setRevealData(data);
+    } catch (e: any) { onError(e.message); setFulfilTarget(null); } finally { setRevealing(false); }
   };
 
   const handleFulfil = async () => {
@@ -75,21 +84,14 @@ export default function VaultRequestsPanel({ onSuccess, onError }: { onSuccess: 
     setFulfilling(true);
     try {
       const isCredential = fulfilTarget.type === "REQUEST_ORG_CREDENTIAL";
-      const body = isCredential
-        ? credForm
-        : { secret: faForm.secret, algorithm: faForm.algorithm, digits: parseInt(faForm.digits), period: parseInt(faForm.period) };
-
-      if (isCredential && (!credForm.username || !credForm.password)) { onError("Username and password are required."); setFulfilling(false); return; }
-      if (!isCredential && !faForm.secret.trim()) { onError("Secret is required."); setFulfilling(false); return; }
-
       const res = await fetch(`/api/vault-requests/${fulfilTarget.id}/fulfil`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(isCredential ? { description: description || undefined } : {}),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fulfil request");
-      onSuccess("Request fulfilled — the record has been created. Remember to share/assign it to the requester separately.");
+      onSuccess("Request fulfilled — the record has been created from the requester's submitted secret. Remember to share/assign it to them separately.");
       setFulfilTarget(null);
       fetchRequests();
     } catch (e: any) { onError(e.message); } finally { setFulfilling(false); }
@@ -124,6 +126,7 @@ export default function VaultRequestsPanel({ onSuccess, onError }: { onSuccess: 
                   <Chip label={r.status} size="small" color={STATUS_COLOR[r.status]} />
                   {r.status === "PENDING" && (
                     <>
+                      <Button size="small" variant="outlined" onClick={() => openFulfil(r)} startIcon={<Eye size={14} />}>Review Secret</Button>
                       <Button size="small" variant="outlined" color="success" startIcon={<Check size={14} />} onClick={() => openReview(r, "APPROVED")}>Approve</Button>
                       <Button size="small" variant="outlined" color="error" startIcon={<X size={14} />} onClick={() => openReview(r, "REJECTED")}>Reject</Button>
                     </>
@@ -143,6 +146,9 @@ export default function VaultRequestsPanel({ onSuccess, onError }: { onSuccess: 
         <DialogTitle sx={{ fontWeight: 800 }}>{reviewAction === "APPROVED" ? "Approve" : "Reject"} Request</DialogTitle>
         <DialogContent dividers>
           <TextField fullWidth multiline rows={3} label="Note (optional)" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} sx={{ mt: 1 }} />
+          {reviewAction === "REJECTED" && (
+            <Alert severity="info" sx={{ mt: 2, borderRadius: 2 }}>The requester&apos;s submitted secret will be permanently discarded on rejection.</Alert>
+          )}
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
           <Button onClick={() => setReviewTarget(null)}>Cancel</Button>
@@ -152,56 +158,55 @@ export default function VaultRequestsPanel({ onSuccess, onError }: { onSuccess: 
         </DialogActions>
       </Dialog>
 
-      {/* Fulfil Dialog */}
+      {/* Reveal + Fulfil Dialog */}
       <Dialog open={!!fulfilTarget} onClose={() => setFulfilTarget(null)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 800 }}>Fulfil Request: {fulfilTarget?.appName}</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800, display: "flex", alignItems: "center", gap: 1 }}>
+          <Lock size={18} /> {fulfilTarget?.appName}
+        </DialogTitle>
         <DialogContent dividers>
-          <Alert severity="info" sx={{ borderRadius: 2, mb: 3 }}>
-            This creates the real {fulfilTarget?.type === "REQUEST_ORG_CREDENTIAL" ? "credential" : "2FA entry"} in the vault. It will not be shared with the requester automatically — do that separately from the vault panel.
-          </Alert>
-          {fulfilTarget?.type === "REQUEST_ORG_CREDENTIAL" ? (
+          {revealing ? (
+            <Box sx={{ textAlign: "center", py: 3 }}><CircularProgress size={24} /></Box>
+          ) : revealData ? (
             <Stack spacing={3}>
-              <TextField fullWidth required label="Username" value={credForm.username} onChange={(e) => setCredForm((p) => ({ ...p, username: e.target.value }))} />
-              <TextField fullWidth required label="Password" type={showSecret ? "text" : "password"} value={credForm.password} onChange={(e) => setCredForm((p) => ({ ...p, password: e.target.value }))}
-                InputProps={{ endAdornment: <Button size="small" onClick={() => setShowSecret((s) => !s)}>{showSecret ? <EyeOff size={14} /> : <Eye size={14} />}</Button> }} />
-              <TextField fullWidth label="Description (optional)" value={credForm.description} onChange={(e) => setCredForm((p) => ({ ...p, description: e.target.value }))} />
+              <Alert severity="info" sx={{ borderRadius: 2 }}>
+                This is the {fulfilTarget?.type === "REQUEST_ORG_CREDENTIAL" ? "credential" : "2FA secret"} the requester submitted with their request. Verify it, then create the vault record from it — nothing here is typed in by you.
+              </Alert>
+              {fulfilTarget?.type === "REQUEST_ORG_CREDENTIAL" ? (
+                <>
+                  <Box><Typography variant="caption" sx={{ fontWeight: 700 }}>USERNAME</Typography><Typography variant="body2" sx={{ fontFamily: "monospace" }}>{revealData.username}</Typography></Box>
+                  <Box>
+                    <Typography variant="caption" sx={{ fontWeight: 700 }}>PASSWORD</Typography>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Typography variant="body2" sx={{ fontFamily: "monospace" }}>{showSecret ? revealData.password : "••••••••••"}</Typography>
+                      <Button size="small" onClick={() => setShowSecret((s) => !s)} startIcon={showSecret ? <EyeOff size={14} /> : <Eye size={14} />}>{showSecret ? "Hide" : "Show"}</Button>
+                    </Stack>
+                  </Box>
+                  {fulfilTarget?.status === "APPROVED" && (
+                    <TextField fullWidth label="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} />
+                  )}
+                </>
+              ) : (
+                <>
+                  <Box>
+                    <Typography variant="caption" sx={{ fontWeight: 700 }}>SECRET</Typography>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Typography variant="body2" sx={{ fontFamily: "monospace", wordBreak: "break-all" }}>{showSecret ? revealData.secret : "•".repeat(16)}</Typography>
+                      <Button size="small" onClick={() => setShowSecret((s) => !s)} startIcon={showSecret ? <EyeOff size={14} /> : <Eye size={14} />}>{showSecret ? "Hide" : "Show"}</Button>
+                    </Stack>
+                  </Box>
+                  <Box><Typography variant="caption" sx={{ fontWeight: 700 }}>CONFIG</Typography><Typography variant="body2">{revealData.algorithm} · {revealData.digits} digits · {revealData.period}s</Typography></Box>
+                </>
+              )}
             </Stack>
-          ) : (
-            <Stack spacing={3}>
-              <TextField fullWidth required label="Secret (Base32)" type={showSecret ? "text" : "password"} value={faForm.secret} onChange={(e) => setFaForm((p) => ({ ...p, secret: e.target.value }))}
-                InputProps={{ endAdornment: <Button size="small" onClick={() => setShowSecret((s) => !s)}>{showSecret ? <EyeOff size={14} /> : <Eye size={14} />}</Button> }} />
-              <Stack direction="row" spacing={2}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Algorithm</InputLabel>
-                  <Select label="Algorithm" value={faForm.algorithm} onChange={(e) => setFaForm((p) => ({ ...p, algorithm: e.target.value }))}>
-                    <MenuItem value="SHA1">SHA1</MenuItem>
-                    <MenuItem value="SHA256">SHA256</MenuItem>
-                    <MenuItem value="SHA512">SHA512</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Digits</InputLabel>
-                  <Select label="Digits" value={faForm.digits} onChange={(e) => setFaForm((p) => ({ ...p, digits: e.target.value }))}>
-                    <MenuItem value="6">6</MenuItem>
-                    <MenuItem value="8">8</MenuItem>
-                  </Select>
-                </FormControl>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Period</InputLabel>
-                  <Select label="Period" value={faForm.period} onChange={(e) => setFaForm((p) => ({ ...p, period: e.target.value }))}>
-                    <MenuItem value="30">30</MenuItem>
-                    <MenuItem value="60">60</MenuItem>
-                  </Select>
-                </FormControl>
-              </Stack>
-            </Stack>
-          )}
+          ) : null}
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setFulfilTarget(null)}>Cancel</Button>
-          <Button onClick={handleFulfil} variant="contained" disabled={fulfilling}>
-            {fulfilling ? <CircularProgress size={18} color="inherit" /> : "Create Record"}
-          </Button>
+          <Button onClick={() => setFulfilTarget(null)}>Close</Button>
+          {fulfilTarget?.status === "APPROVED" && (
+            <Button onClick={handleFulfil} variant="contained" disabled={fulfilling || !revealData}>
+              {fulfilling ? <CircularProgress size={18} color="inherit" /> : "Create Record"}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Box>
