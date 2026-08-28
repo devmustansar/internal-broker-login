@@ -4,7 +4,7 @@ export interface InternalUser {
   id: string;
   email: string;
   name: string;
-  role: "super_admin" | "admin" | "user" | "readonly";
+  role: "super_admin" | "admin" | "director" | "pm" | "user" | "readonly";
   createdAt: string;
 }
 

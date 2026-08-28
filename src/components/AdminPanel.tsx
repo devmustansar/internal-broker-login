@@ -1583,6 +1583,8 @@ function CreateUserForm({ onSuccess, onError }: AdminActionProps) {
               <MenuItem value="user">Standard Developer</MenuItem>
               {(user?.role === "super_admin" || user?.role === "admin") && <MenuItem value="admin">Cluster Administrator</MenuItem>}
               <MenuItem value="readonly">Read-Only Auditor</MenuItem>
+              <MenuItem value="director">Director</MenuItem>
+              <MenuItem value="pm">Project Manager</MenuItem>
               {user?.role === "super_admin" && <MenuItem value="super_admin">Super Administrator</MenuItem>}
             </Select>
           </FormControl>
@@ -1655,6 +1657,9 @@ function OrganizationsPanel({ onSuccess, onError }: AdminActionProps) {
   const { user } = useApp();
   const isSuperAdminUser = user?.role === "super_admin";
   const isGlobalAdmin = user?.role === "super_admin" || user?.role === "admin";
+  // Directors and PMs can also create organizations — they're auto-enrolled as
+  // owner of whatever org they create, so they don't need global admin powers.
+  const canCreateOrg = isSuperAdminUser || user?.role === "director" || user?.role === "pm";
 
   // Inline expand state — tracks which org IDs are expanded
   const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());
@@ -1803,8 +1808,8 @@ function OrganizationsPanel({ onSuccess, onError }: AdminActionProps) {
 
   return (
     <Stack spacing={8}>
-      {/* Create Organization — super_admin only */}
-      {isSuperAdminUser && (
+      {/* Create Organization — super_admin, director, or pm */}
+      {canCreateOrg && (
         <Box>
           <Typography variant="caption" sx={{ mb: 6, pb: 2, display: 'flex', alignItems: 'center', gap: 2, fontWeight: 800, color: 'primary.main', borderBottom: `1px solid ${theme.palette.divider}`, textTransform: 'uppercase' }}>
             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'primary.main' }} />
@@ -2281,6 +2286,8 @@ function UsersPanel({ onSuccess, onError }: AdminActionProps) {
   const roleColor = (role: string) => {
     if (role === "super_admin") return "error";
     if (role === "admin") return "warning";
+    if (role === "director") return "info";
+    if (role === "pm") return "secondary";
     return "default";
   };
 
@@ -3021,7 +3028,10 @@ export default function AdminPanel() {
   const isGlobalAdmin = user?.role === "admin" || user?.role === "super_admin";
   const hasOrgRoleEarly = (Object.values((user?.orgRoles || {}) as Record<string, string>)).some((r) => r === "admin" || r === "owner");
   const isResourceOwnerOnly = !isGlobalAdmin && !hasOrgRoleEarly && !!(user as any)?.isResourceOwner;
-  const [activeTab, setActiveTab] = useState(isResourceOwnerOnly ? 5 : 0);
+  // Director/pm who haven't created (or been added to) an org yet: only the
+  // Organizations tab is relevant — that's where they create their first org.
+  const isPureOrgCreator = !isGlobalAdmin && !hasOrgRoleEarly && !isResourceOwnerOnly && (user?.role === "director" || user?.role === "pm");
+  const [activeTab, setActiveTab] = useState(isResourceOwnerOnly ? 5 : isPureOrgCreator ? 4 : 0);
 
   const [editingWebResource, setEditingWebResource] = useState<any>(null);
   const [editingAwsResource, setEditingAwsResource] = useState<any>(null);
@@ -3039,7 +3049,7 @@ export default function AdminPanel() {
   };
 
   const hasOrgRole = hasOrgRoleEarly;
-  if (!isGlobalAdmin && !hasOrgRole && !isResourceOwnerOnly) {
+  if (!isGlobalAdmin && !hasOrgRole && !isResourceOwnerOnly && !isPureOrgCreator) {
     return (
       <Container maxWidth="sm" sx={{ mt: 10 }}>
         <Paper elevation={1} sx={{ p: 6, textAlign: 'center', borderRadius: 6, bgcolor: alpha(theme.palette.error.main, 0.05), border: `1px solid ${alpha(theme.palette.error.main, 0.1)}` }}>
@@ -3071,9 +3081,9 @@ export default function AdminPanel() {
             '& .MuiTab-root': { fontWeight: 800, fontSize: '0.7rem', letterSpacing: '0.05em', px: 2, minWidth: 'auto' }
           }}
         >
-          {!isResourceOwnerOnly && <Tab icon={<Rocket size={18} />} iconPosition="start" label="PROVISION" value={0} />}
-          {!isResourceOwnerOnly && <Tab icon={<Combine size={18} />} iconPosition="start" label="RESOURCES" value={1} />}
-          {!isResourceOwnerOnly && <Tab icon={<Users size={18} />} iconPosition="start" label="IDENTITIES" value={2} />}
+          {!isResourceOwnerOnly && !isPureOrgCreator && <Tab icon={<Rocket size={18} />} iconPosition="start" label="PROVISION" value={0} />}
+          {!isResourceOwnerOnly && !isPureOrgCreator && <Tab icon={<Combine size={18} />} iconPosition="start" label="RESOURCES" value={1} />}
+          {!isResourceOwnerOnly && !isPureOrgCreator && <Tab icon={<Users size={18} />} iconPosition="start" label="IDENTITIES" value={2} />}
           {isGlobalAdmin && <Tab icon={<ClipboardList size={18} />} iconPosition="start" label="AUDIT LOGS" value={3} />}
           {!isResourceOwnerOnly && <Tab icon={<Building2 size={18} />} iconPosition="start" label="ORGANIZATIONS" value={4} />}
           <Tab icon={<KeyRound size={18} />} iconPosition="start" label="CREDENTIAL VAULT" value={5} />

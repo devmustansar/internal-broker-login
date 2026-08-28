@@ -58,8 +58,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (data.username || data.password) {
       const current = decryptPayload<{ username: string; password: string }>(existing.encryptedPayload, `personal-credential:${id}`);
       updateData.encryptedPayload = encryptPayload({
-        username: data.username ?? current.username,
-        password: data.password ?? current.password,
+        username: data.username || current.username,
+        password: data.password || current.password,
       });
       secretChanged = !!data.password;
     }

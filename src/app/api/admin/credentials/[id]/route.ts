@@ -86,8 +86,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
         `credential:${id}`
       );
       updateData.encryptedPayload = encryptPayload({
-        username: data.username ?? currentPayload.username,
-        password: data.password ?? currentPayload.password,
+        username: data.username || currentPayload.username,
+        password: data.password || currentPayload.password,
       });
       secretRotated = !!data.password;
     }

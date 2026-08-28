@@ -6,14 +6,16 @@ import {
   badRequest,
   serverError,
 } from "@/lib/api-helpers";
-import { isSuperAdmin, isAdminOrAbove, isOrgOwner, getAdminOrgIds, canAccessVaultManagement } from "@/lib/auth-policy";
+import { isSuperAdmin, isAdminOrAbove, isOrgOwner, getAdminOrgIds, canAccessVaultManagement, canCreateOrganization } from "@/lib/auth-policy";
 import { prisma } from "@/lib/prisma";
 
 /**
  * GET /api/admin/organizations
  * Super admin: returns all organizations with counts.
  * Org admin/owner: returns only their admin-level organizations.
- * Resource owner (no org role): returns only orgs where they own a resource/credential.
+ * Everyone else (member-only roles, resource owners, director/pm before they've
+ * been granted an org role): returns only orgs they're a member of, or where
+ * they own a resource/AWS resource/credential.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -42,14 +44,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(orgs);
     }
 
-    // Resource owner only: orgs where they own a resource, AWS resource, or credential
-    const [ownedResources, ownedAwsResources, ownedCredentials] = await Promise.all([
+    // Everyone else: orgs they're a member of (any role), or where they own a
+    // resource, AWS resource, or credential.
+    const [memberships, ownedResources, ownedAwsResources, ownedCredentials] = await Promise.all([
+      prisma.userOrganization.findMany({ where: { userId: auth.userId }, select: { organizationId: true } }),
       prisma.resource.findMany({ where: { ownerUserId: auth.userId }, select: { organizationId: true } }),
       prisma.awsResource.findMany({ where: { ownerUserId: auth.userId }, select: { organizationId: true } }),
       prisma.sharedCredential.findMany({ where: { ownerUserId: auth.userId }, select: { organizationId: true } }),
     ]);
     const orgIds = new Set<string>();
-    for (const r of [...ownedResources, ...ownedAwsResources, ...ownedCredentials]) {
+    for (const r of [...memberships, ...ownedResources, ...ownedAwsResources, ...ownedCredentials]) {
       if (r.organizationId) orgIds.add(r.organizationId);
     }
 
@@ -66,20 +70,29 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/admin/organizations
- * Super admin only: creates a new organization.
+ * Super admin, director, or pm: creates a new organization.
+ * Director/pm creators are auto-enrolled as "owner" of the org they create,
+ * since they hold no global admin powers otherwise — this is what scopes
+ * their access down to just the org(s) they've created or are a member of.
  */
 export async function POST(req: NextRequest) {
   try {
     const auth = await getAuthContext(req);
     if (!auth) return unauthorized();
-    if (!isSuperAdmin(auth))
-      return forbidden("Only super admins can create organizations");
+    if (!canCreateOrganization(auth))
+      return forbidden("Only super admins, directors, or PMs can create organizations");
 
     const data = await req.json();
     if (!data.name) return badRequest("Missing required field: name");
 
     const org = await prisma.organization.create({
-      data: { name: data.name, description: data.description || null },
+      data: {
+        name: data.name,
+        description: data.description || null,
+        ...(!isSuperAdmin(auth)
+          ? { users: { create: { userId: auth.userId, role: "owner" } } }
+          : {}),
+      },
     });
 
     return NextResponse.json(org, { status: 201 });

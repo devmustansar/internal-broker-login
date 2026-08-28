@@ -4,12 +4,18 @@ import type { AuthContext } from "@/types";
 //
 // Centralized authorization logic for the multi-tenant role system.
 // Two axes of access:
-//   1. Global role  — super_admin | admin | user | readonly
+//   1. Global role  — super_admin | admin | director | pm | user | readonly
 //   2. Org-scoped role — owner | admin | member (per UserOrganization)
 //
 // Super_admin always bypasses everything.
 // Global "admin" is a legacy shortcut: treated as org-admin for all assigned orgs.
 // Org-level "owner" or "admin" grants admin powers within that specific org.
+//
+// "director" and "pm" are global roles that may create new organizations
+// (see canCreateOrganization), but carry no implicit admin powers of their own —
+// they are auto-enrolled as org "owner" for whatever org they create, and from
+// then on are scoped exactly like any other org owner: access to that org (and
+// any other org/resource they're explicitly associated with), nothing more.
 
 /** Returns true if the user has the super_admin role (full system access). */
 export function isSuperAdmin(auth: AuthContext): boolean {
@@ -168,4 +174,13 @@ export function canRequestForOrg(auth: AuthContext, organizationId: string): boo
 /** Coarse gate for vault management surfaces: org admin/owner/global-admin OR a resource owner. */
 export function canAccessVaultManagement(auth: AuthContext): boolean {
   return isAdminOrAbove(auth) || !!auth.isResourceOwner;
+}
+
+/**
+ * Can the actor create a new organization?
+ * Super_admin, and the "director" / "pm" global roles (who are auto-enrolled
+ * as owner of whatever org they create — see POST /api/admin/organizations).
+ */
+export function canCreateOrganization(auth: AuthContext): boolean {
+  return isSuperAdmin(auth) || auth.role === "director" || auth.role === "pm";
 }

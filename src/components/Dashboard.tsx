@@ -75,6 +75,10 @@ export default function Dashboard() {
     [user]
   );
 
+  // Directors and PMs can always reach the admin console — even before they've
+  // created (or been added to) an org — since that's where they create one.
+  const canCreateOrg = user?.role === "director" || user?.role === "pm";
+
   useEffect(() => {
     const load = async () => {
       setIsLoadingResources(true);
@@ -192,7 +196,7 @@ export default function Dashboard() {
               >
                 My Requests
               </Button>
-              {(user?.role === "admin" || user?.role === "super_admin" || (Object.values((user?.orgRoles || {}) as Record<string, string>)).some((r) => r === "admin" || r === "owner")) && (
+              {(user?.role === "admin" || user?.role === "super_admin" || canCreateOrg || (Object.values((user?.orgRoles || {}) as Record<string, string>)).some((r) => r === "admin" || r === "owner")) && (
                 <Button 
                   variant={view === 'admin' ? 'contained' : 'text'}
                   onClick={() => setView('admin')}
