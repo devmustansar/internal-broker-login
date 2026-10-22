@@ -64,30 +64,15 @@ export const brokerSessionService = {
 
     // Hosted static apps (e.g. the portfolio hub) live inside the broker itself:
     // access is enforced per request by their own route, so there are no
-    // credentials to fetch and nothing to log in to — just hand back the URL.
+    // credentials to fetch, no managed account and no broker session — just
+    // hand back the URL.
     if (resource.loginAdapter === "internal_static") {
-      const brokerSessionId = uuidv4();
-      const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString();
-      await repo.create({
-        brokerSessionId,
-        internalUserId,
-        resourceId: resource.id,
-        resourceKey,
-        managedAccountKey: "",
-        upstreamCookies: {},
-        expiresAt,
-        createdAt: new Date().toISOString(),
-        status: "active",
-        appHost: resource.appHost,
-        apiHost: resource.apiHost,
-        metadata: { flow: "internal_static", loginAdapter: resource.loginAdapter },
-      });
       return {
-        brokerSessionId,
+        brokerSessionId: "",
         resourceKey,
         appHost: resource.appHost,
         apiHost: resource.apiHost,
-        expiresAt,
+        expiresAt: new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString(),
         status: "active",
         redirectUrl: resource.loginUrl,
       };

@@ -84,6 +84,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ resourceKey }),
       });
       setLastOpenResult(result);
+      // Hosted apps have no broker session to track
+      if (!result.brokerSessionId) return result;
       // Refresh sessions list
       setSessions((prev) => {
         const exists = prev.find((s) => s.brokerSessionId === result.brokerSessionId);
