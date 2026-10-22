@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:seed": "npx prisma db seed"
+    "db:seed": "npx prisma db seed",
+    "db:seed:portfolio": "tsx prisma/seed-portfolio.ts",
+    "sync:portfolio": "bash scripts/sync-portfolio.sh"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

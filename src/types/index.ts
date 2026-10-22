@@ -25,7 +25,7 @@ export interface Resource {
   apiHost: string; // e.g. "https://api.client.com"
   loginUrl: string; // e.g. "https://api.client.com/auth/broker-login"
   loginMethod: "POST" | "GET";
-  loginAdapter: "form_login_basic" | "form_login_csrf" | "json_login" | "magic_link";
+  loginAdapter: "form_login_basic" | "form_login_csrf" | "json_login" | "magic_link" | "internal_static";
   tokenExtractionPath?: string | null;
   tokenValidationPath?: string | null;
   /**

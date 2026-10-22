@@ -43,3 +43,4 @@ export const STR_CRED_SHARED_TITLE = "Shared Credentials";
 export const STR_CRED_SHARED_EMPTY = "No credentials have been shared with you yet.";
 export const STR_CRED_COPIED = "Copied to clipboard!";
 
+export const PORTFOLIO_RESOURCE_KEY = "portfolio";

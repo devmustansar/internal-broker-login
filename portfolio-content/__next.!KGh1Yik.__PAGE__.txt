@@ -1,0 +1,20 @@
+3:"$Sreact.fragment"
+4:"/portfolio/_next/static/chunks/0umf92h1sb77c.js"
+5:I[97367,["$4"],"OutletBoundary"]
+6:"$Sreact.suspense"
+a:"ViewportBoundary"
+b:I[97367,["$4"],"$a"]
+c:"MetadataBoundary"
+d:I[97367,["$4"],"$c"]
+e:I[27201,["$4"],"IconMark"]
+9:X
+2:[["children",{"s":"__PAGE__","h":128,"d":{"r":["$","$3","c",{"children":[["$","div",null,{"data-hub-page":"home","hidden":true}],null,["$","$L5",null,{"children":["$","$6",null,{"name":"Next.MetadataOutlet","children":"$@7"}]}]]}],"p":"$@8","v":null,"s":"$9"}}]]
+1:[["children",{"s":"(hub)","h":32,"c":"$Q2"}]]
+0:{"t":{"t":{"s":"","h":80,"c":"$Q1"},"h":{"r":["$","$3","h",{"children":[null,["$","$Lb",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$Ld",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$6",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"CodingCops Portfolio Hub"}],["$","meta","1",{"name":"description","content":"CodingCops Portfolio Hub — internal project portfolio dashboard."}],["$","link","2",{"rel":"icon","href":"/portfolio/icon.png?icon.3ec--k_qkcqy2.png","sizes":"512x512","type":"image/png"}],["$","link","3",{"rel":"apple-touch-icon","href":"/portfolio/apple-icon.png?apple-icon.3ec--k_qkcqy2.png","sizes":"512x512","type":"image/png"}],["$","$Le","4",{}]]}]}],null]}],null]}],"p":"$@f","v":null,"s":"$9"}},"a":"$@10","u":"$@11","b":"kPOwH1-fxWvZP7XTJJjqQ"}
+7:null
+11:true
+9:300
+9:C
+10:0
+f:"$undefined"
+8:"$undefined"

@@ -43,6 +43,7 @@ const ADAPTER_LABELS: Record<string, string> = {
   form_login_basic: "Form Login",
   form_login_csrf: "Form + CSRF",
   json_login: "JSON API",
+  internal_static: "Hosted",
 };
 
 export default function AppCard({ resource, onOpen }: AppCardProps) {

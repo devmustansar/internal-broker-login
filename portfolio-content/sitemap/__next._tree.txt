@@ -1,0 +1,7 @@
+:HL["/portfolio/_next/static/chunks/1hp6zjwhbd-3r.css","style"]
+:HL["https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap","style"]
+:HL["/portfolio/assets/styles.css","style"]
+:HL["/portfolio/assets/logo-light.png","image"]
+2:[["children",{"s":"__PAGE__","h":160}]]
+1:[["children",{"s":"sitemap","h":96,"c":"$Q2"}]]
+0:{"b":"kPOwH1-fxWvZP7XTJJjqQ","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
