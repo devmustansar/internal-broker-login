@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useApp } from "@/lib/app-context";
 import {
   Box, Typography, Paper, Grid, Chip, IconButton, Tooltip, Skeleton, Alert, Stack,
   Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, useTheme, alpha,
@@ -22,6 +23,7 @@ export default function UserCredentialVault() {
   const theme = useTheme();
 
   // Search & pagination
+  const { selectedOrgId } = useApp();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(ROWS_PER_PAGE_OPTIONS[0]);
@@ -52,18 +54,21 @@ export default function UserCredentialVault() {
   };
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return credentials;
+    const inOrg = selectedOrgId
+      ? credentials.filter(c => c.organization?.id === selectedOrgId)
+      : credentials;
+    if (!search.trim()) return inOrg;
     const q = search.toLowerCase();
-    return credentials.filter(c =>
+    return inOrg.filter(c =>
       c.appName?.toLowerCase().includes(q) ||
       c.loginUrl?.toLowerCase().includes(q) ||
       c.organization?.name?.toLowerCase().includes(q) ||
       c.description?.toLowerCase().includes(q)
     );
-  }, [credentials, search]);
+  }, [credentials, search, selectedOrgId]);
 
-  // Reset to first page on search change
-  useEffect(() => { setPage(0); }, [search]);
+  // Reset to first page on search or organization change
+  useEffect(() => { setPage(0); }, [search, selectedOrgId]);
 
   const paginated = filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
@@ -141,7 +146,7 @@ export default function UserCredentialVault() {
           <Box sx={{ py: 8, textAlign: 'center', border: '2px dashed rgba(255,255,255,0.05)', borderRadius: 4, bgcolor: alpha(theme.palette.background.paper, 0.2) }}>
             <KeyRound size={40} color={theme.palette.text.secondary} style={{ opacity: 0.3, marginBottom: 16 }} />
             <Typography variant="body1" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-              {search ? "No credentials match your search." : "No credentials have been shared with you yet."}
+              {search || selectedOrgId ? "No credentials match your filters." : "No credentials have been shared with you yet."}
             </Typography>
           </Box>
         ) : (

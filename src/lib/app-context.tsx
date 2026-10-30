@@ -32,7 +32,14 @@ interface AppContextValue extends AuthState, BrokerState {
   refreshSession: (sessionId: string) => Promise<BrokerSession | null>;
   /** AWS Console federation launch — returns the full console login URL */
   launchAwsConsole: (resourceKey: string) => Promise<{ loginUrl: string; expiresAt: string; awsAccountId: string; roleArn: string }>;
+  /** Organizations the user belongs to — the org filter only shows when there are 2+. */
+  organizations: { id: string; name: string }[];
+  /** "" means all organizations. Shared by the Dashboard, Credentials and 2FA tabs. */
+  selectedOrgId: string;
+  setSelectedOrgId: (orgId: string) => void;
 }
+
+const ORG_FILTER_STORAGE_KEY = "broker.selectedOrgId";
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -45,6 +52,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [resources, setResources] = useState<any[]>([]);
   const [sessions, setSessions] = useState<BrokerSession[]>([]);
   const [lastOpenResult, setLastOpenResult] = useState<OpenAppResponse | null>(null);
+  const [organizations, setOrganizations] = useState<{ id: string; name: string }[]>([]);
+  const [selectedOrgId, setSelectedOrgIdState] = useState("");
+
+  const setSelectedOrgId = useCallback((orgId: string) => {
+    setSelectedOrgIdState(orgId);
+    try { localStorage.setItem(ORG_FILTER_STORAGE_KEY, orgId); } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetch("/api/organizations")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((orgs: { id: string; name: string }[]) => {
+        setOrganizations(orgs);
+        let saved = "";
+        try { saved = localStorage.getItem(ORG_FILTER_STORAGE_KEY) || ""; } catch {}
+        // Drop a remembered org the user no longer belongs to.
+        setSelectedOrgIdState(orgs.some((o) => o.id === saved) ? saved : "");
+      })
+      .catch(() => {});
+  }, [isAuthenticated]);
 
   const apiFetch = useCallback(
     async (path: string, options: RequestInit = {}) => {
@@ -160,6 +188,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         endSession,
         refreshSession,
         launchAwsConsole,
+        organizations,
+        selectedOrgId,
+        setSelectedOrgId,
       }}
     >
       {children}

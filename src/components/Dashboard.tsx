@@ -12,6 +12,8 @@ import {
   DebugPanel,
 } from "@/components/SessionPanel";
 import AdminPanel from "@/components/AdminPanel";
+import OrgFilter from "@/components/OrgFilter";
+import SuperAdminOverview, { type AdminTarget } from "@/components/SuperAdminOverview";
 import UserCredentialVault from "@/components/UserCredentialVault";
 import UserTwoFactorVault from "@/components/UserTwoFactorVault";
 import PersonalVaultPanel from "@/components/PersonalVaultPanel";
@@ -50,16 +52,20 @@ import {
   Lock,
   Send,
   X,
+  Building2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Dashboard() {
-  const { user, resources, fetchResources, lastOpenResult, sessions } = useApp();
+  const { user, resources, fetchResources, lastOpenResult, sessions, selectedOrgId } = useApp();
   const theme = useTheme();
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [resourceError, setResourceError] = useState<string | null>(null);
   const [modal, setModal] = useState<OpenAppResponse | null>(null);
-  const [view, setView] = useState<"apps" | "credentials" | "2fa" | "personal" | "requests" | "admin">("apps");
+  const [view, setView] = useState<"apps" | "credentials" | "2fa" | "personal" | "requests" | "overview" | "admin">("apps");
+  // Admin console tab to open when jumping in from the super admin overview.
+  const [adminTab, setAdminTab] = useState<number | undefined>(undefined);
+  const ADMIN_TAB_INDEX: Record<AdminTarget, number> = { resources: 1, identities: 2, organizations: 4, credentials: 5, "2fa": 6 };
   const [personalMessage, setPersonalMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Org admin/owner: view resources for a specific user
@@ -122,7 +128,11 @@ export default function Dashboard() {
   }, [viewAsUser]);
 
   const activeSessions = sessions.filter((s) => s.status === "active").length;
-  const displayedResources = viewAsUser ? viewAsResources : resources;
+  const orgScopedResources = viewAsUser ? viewAsResources : resources;
+  const displayedResources = useMemo(
+    () => (selectedOrgId ? orgScopedResources.filter((r) => r.organizationId === selectedOrgId) : orgScopedResources),
+    [orgScopedResources, selectedOrgId]
+  );
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
@@ -150,11 +160,12 @@ export default function Dashboard() {
               Hello, {user?.name?.split(" ")[0]}
             </Typography>
             <Typography variant="subtitle1">
-              {view === "apps" ? APP_DESCRIPTION : view === "credentials" ? "Securely access credentials shared with you." : view === "2fa" ? "Authenticator codes assigned to you. Codes refresh automatically." : APP_ADMIN_DESCRIPTION}
+              {view === "apps" ? APP_DESCRIPTION : view === "credentials" ? "Securely access credentials shared with you." : view === "2fa" ? "Authenticator codes assigned to you. Codes refresh automatically." : view === "overview" ? "Every organization, what it owns and who can reach it." : APP_ADMIN_DESCRIPTION}
             </Typography>
           </Box>
 
-          <Stack direction="row" spacing={2} alignItems="center">
+          <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
+            {(view === "apps" || view === "credentials" || view === "2fa") && <OrgFilter />}
             <Paper elevation={0} sx={{ p: 0.5, borderRadius: 3, display: 'flex', bgcolor: alpha(theme.palette.background.paper, 0.5), border: `1px solid ${theme.palette.divider}` }}>
               <Button 
                 variant={view === 'apps' ? 'contained' : 'text'}
@@ -196,10 +207,20 @@ export default function Dashboard() {
               >
                 My Requests
               </Button>
+              {user?.role === "super_admin" && (
+                <Button
+                  variant={view === 'overview' ? 'contained' : 'text'}
+                  onClick={() => setView('overview')}
+                  startIcon={<Building2 size={16} />}
+                  sx={{ borderRadius: 2.5, px: 2, py: 0.8, color: view === 'overview' ? 'white' : 'text.secondary' }}
+                >
+                  Overview
+                </Button>
+              )}
               {(user?.role === "admin" || user?.role === "super_admin" || canCreateOrg || (Object.values((user?.orgRoles || {}) as Record<string, string>)).some((r) => r === "admin" || r === "owner")) && (
                 <Button 
                   variant={view === 'admin' ? 'contained' : 'text'}
-                  onClick={() => setView('admin')}
+                  onClick={() => { setAdminTab(undefined); setView('admin'); }}
                   startIcon={<Settings2 size={16} />}
                   sx={{ borderRadius: 2.5, px: 2, py: 0.8, color: view === 'admin' ? 'white' : 'text.secondary' }}
                 >
@@ -466,10 +487,21 @@ export default function Dashboard() {
               </Stack>
             </Grid>
           </Grid>
+        ) : view === "overview" ? (
+          <Fade in={true}>
+            <Box>
+              <SuperAdminOverview
+                onManage={(target) => {
+                  setAdminTab(ADMIN_TAB_INDEX[target]);
+                  setView("admin");
+                }}
+              />
+            </Box>
+          </Fade>
         ) : (
           <Fade in={true}>
             <Box>
-              <AdminPanel />
+              <AdminPanel key={adminTab ?? "default"} initialTab={adminTab} />
             </Box>
           </Fade>
         )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useApp } from "@/lib/app-context";
 import {
   Box, Typography, Paper, Grid, Chip, IconButton, Tooltip, Skeleton, Alert,
   Stack, TextField, InputAdornment, LinearProgress, alpha, useTheme,
@@ -202,6 +203,7 @@ export default function UserTwoFactorVault() {
   const [entries, setEntries] = useState<AssignedEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { selectedOrgId } = useApp();
   const [search, setSearch] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -222,6 +224,7 @@ export default function UserTwoFactorVault() {
   useEffect(() => { fetchEntries(); }, [refreshKey]);
 
   const filtered = entries.filter((e) => {
+    if (selectedOrgId && e.organization?.id !== selectedOrgId) return false;
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
@@ -269,7 +272,7 @@ export default function UserTwoFactorVault() {
 
       {filtered.length === 0 ? (
         <Alert severity="info" sx={{ borderRadius: 3 }}>
-          {search ? "No entries match your search." : "No authenticator codes have been shared with you yet."}
+          {search || selectedOrgId ? "No entries match your filters." : "No authenticator codes have been shared with you yet."}
         </Alert>
       ) : (
         <Grid container spacing={3}>

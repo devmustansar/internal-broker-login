@@ -3019,7 +3019,7 @@ function AuditLogsPanel() {
   );
 }
 
-export default function AdminPanel() {
+export default function AdminPanel({ initialTab }: { initialTab?: number } = {}) {
 
   const [appTypeToggle, setAppTypeToggle] = useState<"web" | "aws">("web");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -3031,7 +3031,7 @@ export default function AdminPanel() {
   // Director/pm who haven't created (or been added to) an org yet: only the
   // Organizations tab is relevant — that's where they create their first org.
   const isPureOrgCreator = !isGlobalAdmin && !hasOrgRoleEarly && !isResourceOwnerOnly && (user?.role === "director" || user?.role === "pm");
-  const [activeTab, setActiveTab] = useState(isResourceOwnerOnly ? 5 : isPureOrgCreator ? 4 : 0);
+  const [activeTab, setActiveTab] = useState(initialTab ?? (isResourceOwnerOnly ? 5 : isPureOrgCreator ? 4 : 0));
 
   const [editingWebResource, setEditingWebResource] = useState<any>(null);
   const [editingAwsResource, setEditingAwsResource] = useState<any>(null);
