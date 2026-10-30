@@ -2,11 +2,16 @@
 const HUB_MODE=window.HUB_MODE||"single",BASE="/portfolio/",PAGE=window.HUB_PAGE||null;
 const D=window.HUB_DATA||null;
 const LOGO_MARK="assets/logo-mark.png";
-const AS_OF="12 Oct 2026";
+const AS_OF="13 Oct 2026";
 const P=D.P, SECTORS=D.S, IND7=D.IND7||[];
 const byId=Object.fromEntries(P.map(p=>[p.id,p]));
 const secBy=Object.fromEntries(SECTORS.map(s=>[s.slug,s]));
 const asset=s=>String(s).startsWith("data:")?s:BASE+s;
+let CS=null;
+function loadCS(){
+  fetch(BASE+"case-studies/case-studies.json").then(r=>r.ok?r.json():null).then(j=>{CS=Object.fromEntries((j&&j.items||[]).map(it=>[it.id,it]));rerender();}).catch(()=>{CS=CS||{};});
+}
+const csFileUrl=f=>BASE+"case-studies/"+encodeURIComponent(f);
 function U(r,q){
   if(HUB_MODE!=="site")return "#"+r+(q?"?"+q:"");
   let f;
@@ -24,7 +29,7 @@ const CAT_ORDER=["AI & LLM","Cloud & DevOps","Frontend & Mobile","Backend","Data
 const NOT7="Not in the 7 target industries";
 const cnt=(a,k,v)=>a.filter(x=>x[k]===v).length;
 const UC_ORDER=[...new Set(P.map(p=>p.useCase))].sort((a,b)=>cnt(P,"useCase",b)-cnt(P,"useCase",a)||a.localeCompare(b));
-const S={safe:false,route:"home",Q:{},dd:null,more:false,pitchAll:false,help:false,heat:null,techq:"",pitch:{sector:"",uc:"",ai:"",roi:false,q:""},picked:[],cmp:[29,32,27]};
+const S={safe:false,route:"home",Q:{},dd:null,more:false,pitchAll:false,help:false,heat:null,techq:"",pitch:{sector:"",uc:"",ai:"",roi:false,q:""},picked:[],cmp:[29,32,27],dlModal:false,dlPending:null};
 try{S.safe=localStorage.getItem("cc-hub-safe")==="1";}catch(e){}
 
 /* ---------- helpers ---------- */
@@ -59,6 +64,45 @@ const aiTxt=p=>p.aiExt?mk(p,[p.aiExt.useCase,...p.aiExt.caps].join(" ")):"";
 const provLine=p=>p.status==="Pre-build"?"Scoped by CodingCops (pre-build)":p.cc?"Delivered by CodingCops":"External build (non-CC project, kept for reference)";
 const ICO_EXT=`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h4v4M13 3 7.5 8.5M12 9.5V13H3V4h3.5"/></svg>`;
 const protoBtn=(p,cls="")=>{if(!p.proto)return "";if(hideName(p))return `<span class="proto off ${cls}" title="Link hidden in client-safe mode">Prototype available</span>`;return `<a class="proto ${cls}" href="${esc(p.proto)}" target="_blank" rel="noopener noreferrer" aria-label="Open the ${esc(ptitle(p))} prototype in a new tab">Prototype available ${ICO_EXT}</a>`;};
+const siteHost=u=>String(u).replace(/^https?:\/\//,"").replace(/^www\./,"").replace(/\/$/,"");
+const siteBtn=(p,cls="")=>{if(!p.site||hideName(p))return "";return `<a class="sitebtn ${cls}" href="${esc(p.site)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${esc(ptitle(p))} marketing website in a new tab">Visit website ${ICO_EXT}</a>`;};
+const ICO_DL=`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.2v7.4M8.1 9.6 5.3 6.8M8 9.6l2.8-2.8M3 13h10"/></svg>`;
+function dlBtn(p,cls=""){
+  const item=CS&&CS[p.id];if(!item)return "";
+  const named=item.files&&item.files.named;
+  const showNamed=named&&!S.safe;
+  const label="Download case study";
+  const aLbl=esc(label+" for "+ptitle(p));
+  if(item.variant==="External"){
+    if(!showNamed)return `<button type="button" class="dlbtn ${cls}" data-act="dlgate" data-pid="${p.id}" data-variant="default" aria-label="${aLbl}">${label} ${ICO_DL}</button>`;
+    const open=S.dd==="dl"+p.id;
+    return `<div class="dd"><button type="button" class="dlbtn ${cls}" data-act="dd" data-k="dl${p.id}" aria-haspopup="true" aria-expanded="${open}" aria-label="${aLbl}">${label} ${chev}</button>${open?`<div class="ddm" role="menu" aria-label="${esc(label)}">
+      <button type="button" class="dlopt" role="menuitem" data-act="dlgate" data-pid="${p.id}" data-variant="default">Without client name</button>
+      <button type="button" class="dlopt" role="menuitem" data-act="dlgate" data-pid="${p.id}" data-variant="named">With client name <span class="sm">Internal only</span></button>
+    </div>`:""}</div>`;
+  }
+  if(!showNamed)return `<a class="dlbtn ${cls}" href="${csFileUrl(item.files.default)}" download aria-label="${aLbl}">${label} ${ICO_DL}</a>`;
+  const open=S.dd==="dl"+p.id;
+  return `<div class="dd"><button type="button" class="dlbtn ${cls}" data-act="dd" data-k="dl${p.id}" aria-haspopup="true" aria-expanded="${open}" aria-label="${aLbl}">${label} ${chev}</button>${open?`<div class="ddm" role="menu" aria-label="${esc(label)}">
+    <a class="dlopt" role="menuitem" href="${csFileUrl(item.files.default)}" download>Without client name</a>
+    <a class="dlopt" role="menuitem" href="${csFileUrl(item.files.named)}" download>With client name <span class="sm">Internal only</span></a>
+  </div>`:""}</div>`;
+}
+function dlModalHtml(){
+  if(!S.dlModal||!S.dlPending)return "";
+  const p=byId[S.dlPending.pid];if(!p)return "";
+  const item=CS&&CS[p.id];if(!item)return "";
+  const variant=S.dlPending.variant==="named"&&item.files.named?"named":"default";
+  const file=variant==="named"?item.files.named:item.files.default;
+  if(!file)return "";
+  return `<div class="dlmodal" data-act="dlcancel" role="dialog" aria-modal="true" aria-label="Confirm external case study download">
+    <div class="dlbox" data-act="dlnoop">
+      <h3>External reference case study</h3>
+      <p>This is a reference case study of a project built by an external partner team. It has no CodingCops branding and must not be presented as CodingCops work.</p>
+      <div class="dlboxacts"><button type="button" class="btn ghost" data-act="dlcancel">Cancel</button><a class="btn" href="${csFileUrl(file)}" download data-act="dlconfirm">Download</a></div>
+    </div>
+  </div>`;
+}
 const plink=p=>`<a href="${U("project-"+p.id)}">${esc(pshort(p))}</a>${p.cc?"":' <span class="muted">(external)</span>'}`;
 
 function stackBar(list,{legend=true,h=8}={}){
@@ -335,12 +379,12 @@ function vProject(id){
   const head=crumbs([["Overview",U("home")],[s.name,U("sector-"+s.slug)],[pshort(p)]])+`
   <section class="phead"><div><div class="kicker">${esc(s.name)} · ${esc(p.sub)}</div><h1>${esc(ptitle(p))}</h1>${sub?`<p class="desc">${esc(sub)}</p>`:""}
     <p class="client">${esc(pclient(p))} · ${provLine(p)}</p>
-    <div class="tags"><span class="tag">${esc(p.useCase)}</span>${aiTag(p)}${stTag(p)}${confTag(p)}${roiTag(p)}${ccPill(p)}</div>${p.proto?`<div style="margin-top:16px">${protoBtn(p,"lg")}</div>`:""}</div>
+    <div class="tags"><span class="tag">${esc(p.useCase)}</span>${aiTag(p)}${stTag(p)}${confTag(p)}${roiTag(p)}${ccPill(p)}</div>${p.proto||(p.site&&!hideName(p))||(CS&&CS[p.id])?`<div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">${protoBtn(p,"lg")}${siteBtn(p,"lg")}${dlBtn(p,"lg")}</div>`:""}</div>
     <div class="oneliner"><p>${T(p,p.oneLiner)}</p>${cpb(mk(p,p.oneLiner))}</div></section>
   <nav class="secnav" aria-label="Sections of this project">${PTABS.map(([k,l])=>`<button type="button" data-act="jump" data-k="${k}" aria-current="${k==="overview"}">${l}</button>`).join("")}</nav>`;
   return head+pOverview(p,H,G)+pStory(p)+pTech(p)+pCampaign(p,H)+pData(p,H)+`
   <section class="section"><div class="sh"><div><h2>Related projects</h2><p>Matched on use case, sector, AI type and shared stack.</p></div></div><div class="pgrid">${p.similar.map(i=>pcard(byId[i])).join("")}</div></section>
-  <nav class="prevnext" aria-label="More in this sector"><a href="${U("project-"+prev.id)}"><span>← Previous in ${esc(s.name)}</span>${esc(ptitle(prev))}</a><a class="next" href="${U("project-"+next.id)}"><span>Next in ${esc(s.name)} →</span>${esc(ptitle(next))}</a></nav>`;
+  <nav class="prevnext" aria-label="More in this sector"><a href="${U("project-"+prev.id)}"><span>← Previous in ${esc(s.name)}</span>${esc(ptitle(prev))}</a><a class="next" href="${U("project-"+next.id)}"><span>Next in ${esc(s.name)} →</span>${esc(ptitle(next))}</a></nav>`+dlModalHtml();
 }
 function aiBlock(p){const x=p.aiExt;if(!x)return "";
   return `<div class="aib${x.delivered?"":" plan"}"><div class="aih"><span class="aik">${x.delivered?"AI capabilities":"AI layer · planned with the build"}</span>${cpb(mk(p,[x.useCase,...x.caps.map(c=>"• "+c)].join("\n")),"Copy")}</div>
@@ -354,7 +398,7 @@ function pOverview(p,H,G){
       <div><dt>Client</dt><dd>${esc(pclient(p))}</dd></div><div><dt>Client size</dt><dd>${factV(p,p.size)}</dd></div><div><dt>Duration</dt><dd>${factV(p,p.duration)}</dd></div>
       <div><dt>Time to value</dt><dd>${factV(p,p.ttv)}</dd></div><div><dt>Improvement</dt><dd>${H?'<span class="gap">Hidden in client-safe mode</span>':factV(p,p.kpi)}</dd></div>
       <div><dt>Industry</dt><dd>${esc(p.industry)}</dd></div><div><dt>Summary sheet</dt><dd>${esc(p.summ.industry)}</dd></div>
-      <div><dt>Target industry</dt><dd>${esc(p.ind7||NOT7)}</dd></div><div><dt>Delivered by</dt><dd>${esc(p.provider)}</dd></div>${p.proto?`<div><dt>Prototype</dt><dd>${hideName(p)?'<span class="gap">Link hidden in client-safe mode</span>':`<a href="${esc(p.proto)}" target="_blank" rel="noopener noreferrer" style="word-break:break-all">${esc(p.proto.replace(/^https:\/\//,"").replace(/\/$/,""))}</a>`}</dd></div>`:""}</dl></div></div>
+      <div><dt>Target industry</dt><dd>${esc(p.ind7||NOT7)}</dd></div><div><dt>Delivered by</dt><dd>${esc(p.provider)}</dd></div>${p.site?`<div><dt>Website</dt><dd>${hideName(p)?'<span class="gap">Hidden in client-safe mode</span>':`<a href="${esc(p.site)}" target="_blank" rel="noopener noreferrer">${esc(siteHost(p.site))}</a>`}</dd></div>`:""}${p.proto?`<div><dt>Prototype</dt><dd>${hideName(p)?'<span class="gap">Link hidden in client-safe mode</span>':`<a href="${esc(p.proto)}" target="_blank" rel="noopener noreferrer" style="word-break:break-all">${esc(p.proto.replace(/^https:\/\//,"").replace(/\/$/,""))}</a>`}</dd></div>`:""}${CS&&CS[p.id]?`<div><dt>Case study</dt><dd>${dlBtn(p,"sm")}</dd></div>`:""}</dl></div></div>
   ${G.length?`<div class="sh" style="margin-top:28px"><div><h3>Screenshots</h3><p>${plural(G.length,"image")} from the case study files. Click to enlarge; use the arrow keys in the viewer.</p></div></div>
     <div class="gallery"><button class="gmain" type="button" data-act="lbopen" data-pid="${p.id}" data-i="0" id="gmain" aria-label="Open screenshot viewer"><img id="gmainimg" src="${G[0].src}" alt="${esc(G[0].cap)}"><span class="cap" id="gmaincap">${esc(G[0].cap)}</span></button>
     <div class="gthumbs">${G.map((g,k)=>`<button type="button" data-act="gthumb" data-pid="${p.id}" data-i="${k}" aria-pressed="${k===0}" aria-label="${esc(g.cap)}"><img src="${g.src}" alt="" loading="lazy"></button>`).join("")}</div></div>`:(hideName(p)&&p.images.length?`<div class="hiddenbox" style="margin-top:20px">${plural(p.images.length,"screenshot")} hidden in client-safe mode.</div>`:"")}</section>`;
@@ -396,7 +440,7 @@ function pData(p,H){
   return `<section class="psec" id="sec-data"><div class="sh"><div><h2>Data &amp; evidence</h2><p>How complete the record is, where it came from, and the classification values exactly as recorded.</p></div></div>
   <div class="grid g3"><div class="card pad"><div class="label">Data completeness</div><div class="meter"><i style="width:${filled/22*100}%"></i></div><p style="font-size:14.5px"><b class="num">${filled}/22</b> fields filled.${gaps.length?" Still to chase:":" Nothing missing."}</p><div style="margin-top:10px">${gaps.map(g=>`<span class="gapchip">${esc(g)}</span>`).join("")}</div></div>
   <div class="card pad"><div class="label">Source files</div>${hideName(p)?`<p class="sup" style="margin-top:10px">File names hidden in client-safe mode.</p>`:`<ul class="side-list" style="margin-top:12px">${(p.sources.length?p.sources:["CC-Projects Impact Data.xlsx (master sheet only)"]).map(f=>`<li class="mono">${esc(f)}</li>`).join("")}</ul>`}</div>
-  <div class="card pad"><div class="label">Classification as recorded</div><dl class="facts">${row("Project ID",`<span class="mono">#${p.id}</span>`)}${row("Sector",esc(p.sectorName))}${row("Sub-industry",esc(p.sub))}${row("Actual industry",esc(cap(p.actualIndustry)))}${row("Use case",esc(p.useCase))}${row("AI type",esc(p.ai))}${row("Status",esc(p.status))}${row("Visibility",esc(p.conf))}${row("Delivered by",esc(p.provider))}${row("Visuals",p.visuals?"Yes":"No")}${row("Measured ROI",p.roi?"Yes":"No")}${row("Prototype",p.proto?(hideName(p)?"Yes (link hidden)":"Yes"):"No")}</dl></div></div>
+  <div class="card pad"><div class="label">Classification as recorded</div><dl class="facts">${row("Project ID",`<span class="mono">#${p.id}</span>`)}${row("Sector",esc(p.sectorName))}${row("Sub-industry",esc(p.sub))}${row("Actual industry",esc(cap(p.actualIndustry)))}${row("Use case",esc(p.useCase))}${row("AI type",esc(p.ai))}${row("Status",esc(p.status))}${row("Visibility",esc(p.conf))}${row("Delivered by",esc(p.provider))}${row("Visuals",p.visuals?"Yes":"No")}${row("Measured ROI",p.roi?"Yes":"No")}${row("Prototype",p.proto?(hideName(p)?"Yes (link hidden)":"Yes"):"No")}${row("Marketing website",p.site?(hideName(p)?"Recorded (hidden)":`<a href="${esc(p.site)}" target="_blank" rel="noopener noreferrer">${esc(siteHost(p.site))}</a>`):"Not recorded")}</dl></div></div>
   ${p.aiExt?`<div class="card pad" style="margin-top:14px"><div class="label">AI record (master sheet rows 29 to 35)</div><dl class="facts">${row("AI status",T(p,p.aiExt.status))}${row("AI use case",T(p,p.aiExt.useCase))}${row("AI stack as scoped",T(p,p.aiExt.stack)||'<span class="gap">Not recorded</span>')}${row("AI impact",T(p,p.aiExt.impact))}</dl></div>`:""}</section>`;
 }
 /* ---------- use cases ---------- */
@@ -533,13 +577,13 @@ function vCompare(){
   const G=[["Business context",[["Sector",p=>esc(p.sectorName)],["Sub-industry",p=>esc(p.sub)],["Use case",p=>esc(p.useCase)],["Target industry",p=>esc(p.ind7||NOT7)],["Client",p=>esc(pclient(p))],["Client size",p=>T(p,p.size||"Not disclosed")],["Duration",p=>T(p,p.duration||"Not disclosed")],["Delivered by",p=>esc(p.provider)]]],
     ["Solution & capabilities",[["One-line summary",p=>T(p,p.oneLiner)],["AI type",p=>aiTag(p)],["AI capabilities",p=>p.aiExt?`<b>${T(p,p.aiExt.useCase)}</b><ul style="padding-left:16px;list-style:disc;margin-top:6px;display:flex;flex-direction:column;gap:4px">${p.aiExt.caps.map(c=>`<li>${T(p,c)}</li>`).join("")}</ul>${p.aiExt.delivered?"":'<span class="meta">Planned with the build</span>'}`:'<span class="muted">None recorded</span>'],["Key features",p=>`<b class="num">${p.features.length}</b> features<ul style="padding-left:16px;list-style:disc;margin-top:6px;display:flex;flex-direction:column;gap:4px">${p.features.slice(0,4).map(f=>`<li>${T(p,f)}</li>`).join("")}</ul>${p.features.length>4?`<details><summary>Show all ${p.features.length}</summary><ul>${p.features.slice(4).map(f=>`<li>${T(p,f)}</li>`).join("")}</ul></details>`:""}`]]],
     ["Technology",[["Tech stack",p=>`<div class="tags">${p.techs.map(t=>`<a class="tag" href="${U("tech","t="+encodeURIComponent(t.n))}">${esc(t.n)}</a>`).join("")||'<span class="muted">Not recorded</span>'}</div>`],["Stack as recorded",p=>`<details><summary>Show raw stack</summary><p style="margin-top:6px">${T(p,p.techRaw)}</p></details>`]]],
-    ["Results & evidence",[["Status",p=>stTag(p)],["Visibility",p=>confTag(p)+" "+roiTag(p)],["Time to value",p=>T(p,p.ttv||"Not disclosed")],["Improvement",p=>hid(p)?hidden:T(p,p.kpi)],...[0,1,2,3].map(k=>[`Result ${k+1}`,p=>hid(p)?hidden:(T(p,p.metrics[k])||'<span class="gap">Not recorded</span>')]),["Visual assets",p=>T(p,p.visualText)],["Prototype",p=>p.proto?protoBtn(p,"sm"):'<span class="muted">None recorded</span>']]],
+    ["Results & evidence",[["Status",p=>stTag(p)],["Visibility",p=>confTag(p)+" "+roiTag(p)],["Time to value",p=>T(p,p.ttv||"Not disclosed")],["Improvement",p=>hid(p)?hidden:T(p,p.kpi)],...[0,1,2,3].map(k=>[`Result ${k+1}`,p=>hid(p)?hidden:(T(p,p.metrics[k])||'<span class="gap">Not recorded</span>')]),["Visual assets",p=>T(p,p.visualText)],["Prototype",p=>p.proto?protoBtn(p,"sm"):'<span class="muted">None recorded</span>'],["Case study",p=>CS&&CS[p.id]?dlBtn(p,"sm"):'<span class="muted">None recorded</span>']]],
     ["Sales relevance",[["Buyer persona",p=>p.persona.map(esc).join("<br>")],["Hook",p=>T(p,p.brief.hook)],["Proof point",p=>T(p,p.brief.proof)],["Campaign tags",p=>`<div class="tags">${p.tags.map(t=>`<span class="tag">${esc(t)}</span>`).join("")}</div>`]]]];
   const cells=f=>sel.map(p=>`<td>${p?f(p):''}</td>`).join("");
   return crumbs([["Overview",U("home")],["Compare projects"]])+`<div class="ph"><div><h1>Compare projects</h1><p class="lede">Put up to three projects side by side to choose which reference to lead with. The selection is saved in the page link.</p></div>${n?`<div class="acts"><button class="btn ghost sm" type="button" data-act="share">Copy link to this comparison</button></div>`:""}</div>
   <div class="csel">${[0,1,2].map(k=>`<div class="card"><label class="label" for="cmp-${k}">Project ${k+1}</label><select id="cmp-${k}" class="inp" data-act="cmp" data-k="${k}" style="margin-top:6px">${opts(S.cmp[k])}</select>${sel[k]?`<a class="nm" href="${U("project-"+sel[k].id)}">${esc(ptitle(sel[k]))}</a><div class="tags" style="margin-top:8px">${stTag(sel[k])}${flags(sel[k])}</div>`:""}</div>`).join("")}</div>
   ${n?`<div class="tablewrap" style="margin-top:18px"><table class="cmp"><thead><tr><th class="rl" scope="col">Field</th>${sel.map((p,k)=>`<th scope="col" style="text-align:left;padding:12px 14px;font-size:14px;color:var(--muted)">${p?esc(ptitle(p)):"Project "+(k+1)}</th>`).join("")}</tr></thead>
-  <tbody>${G.map(([g,rows])=>`<tr class="gh"><th scope="rowgroup" colspan="4">${g}</th></tr>`+rows.map(([l,f])=>`<tr><th class="rl" scope="row">${l}</th>${cells(f)}</tr>`).join("")).join("")}</tbody></table></div>`:`<div class="empty" style="margin-top:18px"><b>Choose at least one project to start the comparison.</b><br>Pick from the dropdowns above; projects are grouped by sector.</div>`}`;
+  <tbody>${G.map(([g,rows])=>`<tr class="gh"><th scope="rowgroup" colspan="4">${g}</th></tr>`+rows.map(([l,f])=>`<tr><th class="rl" scope="row">${l}</th>${cells(f)}</tr>`).join("")).join("")}</tbody></table></div>`:`<div class="empty" style="margin-top:18px"><b>Choose at least one project to start the comparison.</b><br>Pick from the dropdowns above; projects are grouped by sector.</div>`}`+dlModalHtml();
 }
 function vMissing(){return `<div class="empty" style="margin-top:30px"><b>That page doesn't exist.</b><br><a href="${U("home")}">Back to the overview</a>.</div>`;}
 
@@ -582,7 +626,7 @@ function watchSections(){
 const keyOf=k=>k;
 function jumpTo(k,smooth=true){const el=document.getElementById("sec-"+k);if(!el)return;secLock=Date.now()+(smooth?1200:800);el.scrollIntoView({behavior:smooth?"smooth":"auto",block:"start"});document.querySelectorAll(".secnav button").forEach(b=>b.setAttribute("aria-current",b.dataset.k===k));}
 function route(scrollTop=true){
-  const c=cur();S.route=c.r;S.Q=parseQ(c.q);S.dd=null;S.more=false;
+  const c=cur();S.route=c.r;S.Q=parseQ(c.q);S.dd=null;S.more=false;S.dlModal=false;S.dlPending=null;
   render();
   if(S.route==="industries"){requestAnimationFrame(()=>{const s=document.getElementById("sectors");if(s)s.scrollIntoView({block:"start"});});}
   else if(S.route.startsWith("project-")&&S.Q.tab&&S.Q.tab!=="overview"){requestAnimationFrame(()=>{jumpTo(S.Q.tab,false);setTimeout(()=>jumpTo(S.Q.tab,false),350);});}
@@ -638,12 +682,16 @@ document.addEventListener("click",e=>{
   else if(a==="lbclose"){lbClose();}
   else if(a==="lbprev"){LB.i--;lbShow();}
   else if(a==="lbnext"){LB.i++;lbShow();}
+  else if(a==="dlgate"){S.dlPending={pid:+el.dataset.pid,variant:el.dataset.variant};S.dlModal=true;S.dd=null;rerender();}
+  else if(a==="dlcancel"){S.dlModal=false;S.dlPending=null;rerender();}
+  else if(a==="dlnoop"){}
+  else if(a==="dlconfirm"){setTimeout(()=>{S.dlModal=false;S.dlPending=null;rerender();},0);}
 });
 document.getElementById("lb").addEventListener("click",e=>{if(e.target.id==="lb")lbClose();});
 document.addEventListener("keydown",e=>{const lb=document.getElementById("lb");if(!lb.hidden){if(e.key==="Escape")lbClose();if(e.key==="ArrowRight"){LB.i++;lbShow();}if(e.key==="ArrowLeft"){LB.i--;lbShow();}return;}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();openCmd();return;}
   if(e.key==="/"&&!/input|textarea|select/i.test(document.activeElement.tagName)){e.preventDefault();openCmd();return;}
-  if(e.key==="Escape"){if(!document.getElementById("cmd").hidden){closeCmd();return;}if(S.dd){S.dd=null;rerender();}closeSb();}});
+  if(e.key==="Escape"){if(!document.getElementById("cmd").hidden){closeCmd();return;}if(S.dlModal){S.dlModal=false;S.dlPending=null;rerender();return;}if(S.dd){S.dd=null;rerender();}closeSb();}});
 function refreshPitch(){const y=window.scrollY;const r=document.getElementById("pres");if(r){COPY=[];r.innerHTML=pitchResults();window.scrollTo({top:y});}}
 document.addEventListener("change",e=>{
   const el=e.target;const a=el.dataset&&el.dataset.act;
@@ -712,4 +760,4 @@ safeBtn.addEventListener("click",()=>{S.safe=!S.safe;try{localStorage.setItem("c
   document.getElementById("theme").addEventListener("click",()=>{const c=r.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");const nx=c==="dark"?"light":"dark";r.setAttribute("data-theme",nx);try{localStorage.setItem("cc-hub-theme",nx);}catch(e){}toast(nx==="dark"?"Dark theme":"Light theme");});})();
 if(HUB_MODE==="site"){document.querySelectorAll(".nav a").forEach(a=>a.href=U(a.dataset.nav));document.querySelectorAll(".logo").forEach(lg=>lg.href=U("home"));
   window.addEventListener("hashchange",()=>route(false));}
-applySafe();route(false);
+applySafe();route(false);loadCS();

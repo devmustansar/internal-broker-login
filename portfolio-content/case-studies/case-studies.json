@@ -1,0 +1,492 @@
+{
+  "generated": "2026-10-29T21:32:31.316Z",
+  "status": "approved",
+  "items": [
+    {
+      "id": 1,
+      "slug": "01-fittish",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "01-fittish.pptx"
+      }
+    },
+    {
+      "id": 2,
+      "slug": "02-novavita",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "02-novavita.pptx"
+      }
+    },
+    {
+      "id": 3,
+      "slug": "03-nourishme",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "03-nourishme.pptx"
+      }
+    },
+    {
+      "id": 4,
+      "slug": "04-axim",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "04-axim.pptx"
+      }
+    },
+    {
+      "id": 5,
+      "slug": "05-maximus",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "05-maximus.pptx",
+        "named": "05-maximus-named.pptx"
+      }
+    },
+    {
+      "id": 6,
+      "slug": "06-cu-loan-source",
+      "variant": "Standard",
+      "tier": "A",
+      "files": {
+        "default": "06-cu-loan-source.pptx"
+      }
+    },
+    {
+      "id": 7,
+      "slug": "07-steadipay",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "07-steadipay.pptx"
+      }
+    },
+    {
+      "id": 8,
+      "slug": "08-nasclaim",
+      "variant": "Standard",
+      "tier": "C",
+      "files": {
+        "default": "08-nasclaim.pptx"
+      }
+    },
+    {
+      "id": 9,
+      "slug": "09-nextagency",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "09-nextagency.pptx"
+      }
+    },
+    {
+      "id": 10,
+      "slug": "10-dvcc",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "10-dvcc.pptx",
+        "named": "10-dvcc-named.pptx"
+      }
+    },
+    {
+      "id": 11,
+      "slug": "11-letto-ai",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "11-letto-ai.pptx"
+      }
+    },
+    {
+      "id": 12,
+      "slug": "12-revinate",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "12-revinate.pptx"
+      }
+    },
+    {
+      "id": 13,
+      "slug": "13-weplan-ai",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "13-weplan-ai.pptx"
+      }
+    },
+    {
+      "id": 14,
+      "slug": "14-purco",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "14-purco.pptx"
+      }
+    },
+    {
+      "id": 15,
+      "slug": "15-petersen",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "15-petersen.pptx"
+      }
+    },
+    {
+      "id": 16,
+      "slug": "16-relay-automotive",
+      "variant": "Standard",
+      "tier": "C",
+      "files": {
+        "default": "16-relay-automotive.pptx"
+      }
+    },
+    {
+      "id": 17,
+      "slug": "17-smart-system",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "17-smart-system.pptx",
+        "named": "17-smart-system-named.pptx"
+      }
+    },
+    {
+      "id": 18,
+      "slug": "18-perpetual-intelligence-pi",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "18-perpetual-intelligence-pi.pptx"
+      }
+    },
+    {
+      "id": 19,
+      "slug": "19-meprism",
+      "variant": "Standard",
+      "tier": "A",
+      "files": {
+        "default": "19-meprism.pptx"
+      }
+    },
+    {
+      "id": 20,
+      "slug": "20-gogenuity",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "20-gogenuity.pptx"
+      }
+    },
+    {
+      "id": 21,
+      "slug": "21-hermetic-ai",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "21-hermetic-ai.pptx",
+        "named": "21-hermetic-ai-named.pptx"
+      }
+    },
+    {
+      "id": 22,
+      "slug": "22-primex-ai",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "22-primex-ai.pptx"
+      }
+    },
+    {
+      "id": 23,
+      "slug": "23-lango",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "23-lango.pptx"
+      }
+    },
+    {
+      "id": 24,
+      "slug": "24-smarttag-analytics",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "24-smarttag-analytics.pptx",
+        "named": "24-smarttag-analytics-named.pptx"
+      }
+    },
+    {
+      "id": 25,
+      "slug": "25-rcs-portal",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "25-rcs-portal.pptx",
+        "named": "25-rcs-portal-named.pptx"
+      }
+    },
+    {
+      "id": 26,
+      "slug": "26-tcg-erp-system",
+      "variant": "Confidential",
+      "tier": "C",
+      "files": {
+        "default": "26-tcg-erp-system.pptx",
+        "named": "26-tcg-erp-system-named.pptx"
+      }
+    },
+    {
+      "id": 27,
+      "slug": "27-ivy",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "27-ivy.pptx",
+        "named": "27-ivy-named.pptx"
+      }
+    },
+    {
+      "id": 28,
+      "slug": "28-genuity-help-desk-ai",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "28-genuity-help-desk-ai.pptx"
+      }
+    },
+    {
+      "id": 29,
+      "slug": "29-smarty",
+      "variant": "Confidential",
+      "tier": "A",
+      "files": {
+        "default": "29-smarty.pptx",
+        "named": "29-smarty-named.pptx"
+      }
+    },
+    {
+      "id": 30,
+      "slug": "30-s-s-sands-management-mso-platform",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "30-s-s-sands-management-mso-platform.pptx",
+        "named": "30-s-s-sands-management-mso-platform-named.pptx"
+      }
+    },
+    {
+      "id": 31,
+      "slug": "31-external-healthcare-telehealth-emr-platform",
+      "variant": "External",
+      "tier": "A",
+      "files": {
+        "default": "31-external-healthcare-telehealth-emr-platform.pptx"
+      }
+    },
+    {
+      "id": 32,
+      "slug": "32-calculum",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "32-calculum.pptx",
+        "named": "32-calculum-named.pptx"
+      }
+    },
+    {
+      "id": 33,
+      "slug": "33-power-ai",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "33-power-ai.pptx",
+        "named": "33-power-ai-named.pptx"
+      }
+    },
+    {
+      "id": 34,
+      "slug": "34-viscap-ai",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "34-viscap-ai.pptx",
+        "named": "34-viscap-ai-named.pptx"
+      }
+    },
+    {
+      "id": 35,
+      "slug": "35-swap-pm",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "35-swap-pm.pptx"
+      }
+    },
+    {
+      "id": 36,
+      "slug": "36-smb-dynamics",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "36-smb-dynamics.pptx",
+        "named": "36-smb-dynamics-named.pptx"
+      }
+    },
+    {
+      "id": 37,
+      "slug": "37-recidiviz",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "37-recidiviz.pptx",
+        "named": "37-recidiviz-named.pptx"
+      }
+    },
+    {
+      "id": 38,
+      "slug": "38-direct2care",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "38-direct2care.pptx",
+        "named": "38-direct2care-named.pptx"
+      }
+    },
+    {
+      "id": 39,
+      "slug": "39-external-education-marketplace-multi-sided-platform",
+      "variant": "External",
+      "tier": "B",
+      "files": {
+        "default": "39-external-education-marketplace-multi-sided-platform.pptx",
+        "named": "39-external-education-marketplace-multi-sided-platform-named.pptx"
+      }
+    },
+    {
+      "id": 40,
+      "slug": "40-external-education-saas-product-build",
+      "variant": "External",
+      "tier": "B",
+      "files": {
+        "default": "40-external-education-saas-product-build.pptx",
+        "named": "40-external-education-saas-product-build-named.pptx"
+      }
+    },
+    {
+      "id": 41,
+      "slug": "41-kallidus-sapling",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "41-kallidus-sapling.pptx",
+        "named": "41-kallidus-sapling-named.pptx"
+      }
+    },
+    {
+      "id": 42,
+      "slug": "42-mindminer",
+      "variant": "Standard",
+      "tier": "B",
+      "files": {
+        "default": "42-mindminer.pptx"
+      }
+    },
+    {
+      "id": 43,
+      "slug": "43-external-media-marketing-marketing-ad-tech-platform",
+      "variant": "External",
+      "tier": "B",
+      "files": {
+        "default": "43-external-media-marketing-marketing-ad-tech-platform.pptx",
+        "named": "43-external-media-marketing-marketing-ad-tech-platform-named.pptx"
+      }
+    },
+    {
+      "id": 44,
+      "slug": "44-external-media-marketing-marketing-ad-tech-platform",
+      "variant": "External",
+      "tier": "B",
+      "files": {
+        "default": "44-external-media-marketing-marketing-ad-tech-platform.pptx",
+        "named": "44-external-media-marketing-marketing-ad-tech-platform-named.pptx"
+      }
+    },
+    {
+      "id": 45,
+      "slug": "45-external-manufacturing-embedded-device-software",
+      "variant": "External",
+      "tier": "B",
+      "files": {
+        "default": "45-external-manufacturing-embedded-device-software.pptx",
+        "named": "45-external-manufacturing-embedded-device-software-named.pptx"
+      }
+    },
+    {
+      "id": 46,
+      "slug": "46-external-construction-erp-field-operations",
+      "variant": "External",
+      "tier": "B",
+      "files": {
+        "default": "46-external-construction-erp-field-operations.pptx",
+        "named": "46-external-construction-erp-field-operations-named.pptx"
+      }
+    },
+    {
+      "id": 47,
+      "slug": "47-external-manufacturing-genai-copilot-assistant",
+      "variant": "External",
+      "tier": "B",
+      "files": {
+        "default": "47-external-manufacturing-genai-copilot-assistant.pptx"
+      }
+    },
+    {
+      "id": 48,
+      "slug": "48-pine-glen-homes",
+      "variant": "Confidential",
+      "tier": "C",
+      "files": {
+        "default": "48-pine-glen-homes.pptx",
+        "named": "48-pine-glen-homes-named.pptx"
+      }
+    },
+    {
+      "id": 49,
+      "slug": "49-passqual-health",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "49-passqual-health.pptx",
+        "named": "49-passqual-health-named.pptx"
+      }
+    },
+    {
+      "id": 50,
+      "slug": "50-external-manufacturing-legacy-modernization",
+      "variant": "External",
+      "tier": "B",
+      "files": {
+        "default": "50-external-manufacturing-legacy-modernization.pptx",
+        "named": "50-external-manufacturing-legacy-modernization-named.pptx"
+      }
+    },
+    {
+      "id": 51,
+      "slug": "51-lynker",
+      "variant": "Confidential",
+      "tier": "B",
+      "files": {
+        "default": "51-lynker.pptx",
+        "named": "51-lynker-named.pptx"
+      }
+    }
+  ]
+}

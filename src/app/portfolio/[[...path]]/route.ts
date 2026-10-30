@@ -34,6 +34,7 @@ const MIME_TYPES: Record<string, string> = {
   ".mp4": "video/mp4",
   ".webm": "video/webm",
   ".pdf": "application/pdf",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   ".map": "application/json; charset=utf-8",
 };
 
