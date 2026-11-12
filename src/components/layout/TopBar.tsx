@@ -25,6 +25,7 @@ import {
 } from "@mui/material";
 import { LogOut, Bell } from "lucide-react";
 import { motion } from "framer-motion";
+import OrgFilter from "@/components/OrgFilter";
 
 function NotificationBell() {
   const theme = useTheme();
@@ -124,6 +125,12 @@ export default function TopBar() {
               <img src="/Logo-Emblam.png" alt={APP_NAME} style={{ width: 40, height: 40, objectFit: 'contain' }} />
             </Box>
             <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.02em' }}>{APP_NAME}</Typography>
+            {user && (
+              <>
+                <Divider orientation="vertical" flexItem sx={{ height: 24, my: 'auto', display: { xs: 'none', sm: 'block' } }} />
+                <OrgFilter />
+              </>
+            )}
           </Box>
 
           {/* User Section */}

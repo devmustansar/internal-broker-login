@@ -12,7 +12,6 @@ import {
   DebugPanel,
 } from "@/components/SessionPanel";
 import AdminPanel from "@/components/AdminPanel";
-import OrgFilter from "@/components/OrgFilter";
 import SuperAdminOverview, { type AdminTarget } from "@/components/SuperAdminOverview";
 import UserCredentialVault from "@/components/UserCredentialVault";
 import UserTwoFactorVault from "@/components/UserTwoFactorVault";
@@ -165,7 +164,6 @@ export default function Dashboard() {
           </Box>
 
           <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
-            {(view === "apps" || view === "credentials" || view === "2fa") && <OrgFilter />}
             <Paper elevation={0} sx={{ p: 0.5, borderRadius: 3, display: 'flex', bgcolor: alpha(theme.palette.background.paper, 0.5), border: `1px solid ${theme.palette.divider}` }}>
               <Button 
                 variant={view === 'apps' ? 'contained' : 'text'}
